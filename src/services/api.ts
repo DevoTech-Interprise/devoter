@@ -1,6 +1,6 @@
 
 import axios from 'axios';
-import type { StringFormatParams } from 'zod/v4/core';
+
 
 const api = axios.create({
   baseURL: 'http://apiconecta.devotech.com.br/',

@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
-import { Eye, EyeOff, Lock, User, Phone } from "lucide-react";
+import { Eye, EyeOff, Lock, User } from "lucide-react";
 import { useTheme } from "../../context/ThemeContext";
 import { authService } from "../../services/authService";
 import PhoneInput from "react-phone-input-2";

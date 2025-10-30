@@ -5,6 +5,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 
 import Login from "./pages/login/login";
 import Dashboard from "./pages/dashboard/dashboard";
+import InvitePage from "./pages/invite/invite";
 
 
 function App() {
@@ -13,7 +14,7 @@ function App() {
       <Router>
         <Routes>
           {/* Páginas públicas */}
-          {/* <Route path="/" element={<Home />} /> */}
+          <Route path="/" element={<Dashboard />} />
           <Route path="/login" element={<Login />} />
 
           {/* Páginas privadas */}
@@ -22,6 +23,14 @@ function App() {
             element={
               <PrivateRoute>
                 <Dashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/invite"
+            element={
+              <PrivateRoute>
+                <InvitePage />
               </PrivateRoute>
             }
           />
