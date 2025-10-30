@@ -4,6 +4,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 
 
 import Login from "./pages/login/login";
+import Dashboard from "./pages/dashboard/dashboard";
 
 
 function App() {
@@ -16,14 +17,14 @@ function App() {
           <Route path="/login" element={<Login />} />
 
           {/* Páginas privadas */}
-          {/* <Route
+          <Route
             path="/dashboard"
             element={
               <PrivateRoute>
                 <Dashboard />
               </PrivateRoute>
             }
-          /> */}
+          />
         </Routes>
       </Router>
     </ThemeProvider>

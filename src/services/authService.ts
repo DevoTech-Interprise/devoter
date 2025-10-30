@@ -4,7 +4,7 @@ import type { LoginFormData } from '../schemas/auth';
 export const authService = {
   async login(data: LoginFormData) {
     try {
-      const response = await api.post('api/user/login', data);
+      const response = await api.post('api/auth/login', data);
       return response.data;
     } catch (messages: any) {
       throw messages;

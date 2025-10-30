@@ -29,24 +29,28 @@ const Login: React.FC = () => {
 
   const onSubmit = async (data: LoginFormData) => {
     try {
-      const response = await authService.login({
-        login: data.login,
+      const loginData = {
         password: data.password,
-      });
+        ...(loginType === "email"
+          ? { email: data.email }
+          : { phone: data.phone?.replace("+55", "") })
+      };
 
-      if (!response.token) throw new Error("Token não encontrado na resposta.");
+      const response = await authService.login(loginData);
+
+      if (!response.access_token) throw new Error("Token não encontrado na resposta.");
 
       localStorage.setItem(
         "user",
         JSON.stringify({
-          token: response.token,
+          token: response.access_token,
           name: response.name,
           email: response.email,
           tenant_id: response.tenant_id,
         })
       );
 
-      localStorage.setItem("token", response.token);
+      localStorage.setItem("token", response.access_token);
       toast.success("Login realizado com sucesso!");
       navigate("/Dashboard");
     } catch (error: any) {
@@ -97,7 +101,8 @@ const Login: React.FC = () => {
               type="button"
               onClick={() => {
                 setLoginType("email");
-                setValue("login", ""); // limpa campo anterior
+                setValue("email", "");
+                setValue("phone", "");
               }}
               className={`px-3 py-1 rounded-full text-sm font-medium ${
                 loginType === "email"
@@ -111,7 +116,8 @@ const Login: React.FC = () => {
               type="button"
               onClick={() => {
                 setLoginType("phone");
-                setValue("login", ""); // limpa campo anterior
+                setValue("email", "");
+                setValue("phone", "");
               }}
               className={`px-3 py-1 rounded-full text-sm font-medium ${
                 loginType === "phone"
@@ -137,10 +143,10 @@ const Login: React.FC = () => {
                   <User className="text-gray-400 w-5 h-5" />
                 </div>
                 <input
-                  id="login"
+                  id="email"
                   type="email"
                   placeholder="you@example.com"
-                  {...register("login")}
+                  {...register("email")}
                   className={`w-full pl-10 pr-3 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent ${
                     darkMode
                       ? "bg-gray-700 border-gray-600 text-white focus:ring-blue-400"
@@ -148,9 +154,9 @@ const Login: React.FC = () => {
                   }`}
                 />
               </div>
-              {errors.login && (
+              {errors.email && (
                 <p className="mt-1 text-sm text-red-500">
-                  {errors.login.message}
+                  {errors.email.message}
                 </p>
               )}
             </div>
@@ -164,7 +170,7 @@ const Login: React.FC = () => {
               </label>
               <PhoneInput
                 country={"br"}
-                onChange={(value) => setValue("login", "+" + value)}
+                onChange={(value) => setValue("phone", value)}
                 inputStyle={{
                   width: "100%",
                   height: "42px",
@@ -178,9 +184,9 @@ const Login: React.FC = () => {
                   border: darkMode ? "1px solid #4B5563" : "1px solid #D1D5DB",
                 }}
               />
-              {errors.login && (
+              {errors.phone && (
                 <p className="mt-1 text-sm text-red-500">
-                  {errors.login.message}
+                  {errors.phone.message}
                 </p>
               )}
             </div>
