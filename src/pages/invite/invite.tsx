@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { User, Mail, Lock, MapPin, ChevronRight, Loader2 } from "lucide-react";
+import { User, Mail, Lock, MapPin, ChevronRight } from "lucide-react";
 import PhoneInput from "react-phone-input-2";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast, ToastContainer } from "react-toastify";
-import { useParams, useNavigate } from "react-router-dom";
+import { useTheme } from "../../context/ThemeContext";
+import { useNavigate } from "react-router-dom";
 import { inviteService } from "../../services/inviteService";
 
 const formSchema = z.object({
@@ -31,38 +32,16 @@ const formSchema = z.object({
 
 type FormType = z.infer<typeof formSchema>;
 
-const InviteRegister = () => {
+const Invites = () => {
+  const { darkMode } = useTheme();
+  const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [timer, setTimer] = useState(600);
   const [estados, setEstados] = useState<any[]>([]);
   const [cidades, setCidades] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [campaignData, setCampaignData] = useState<any>(null);
-  const navigate = useNavigate();
-  const { token } = useParams();
-
-  useEffect(() => {
-    const fetchCampaignData = async () => {
-      if (!token) {
-        toast.error("Token de convite inválido");
-        navigate("/");
-        return;
-      }
-
-      try {
-        const data = await inviteService.getCampaignByInviteToken(token);
-        setCampaignData(data);
-      } catch (error) {
-        console.error("Erro ao buscar dados da campanha:", error);
-        toast.error("Erro ao carregar informações do convite");
-        navigate("/");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchCampaignData();
-  }, [token, navigate]);
+  const [inviteLink, setInviteLink] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [campaign, setCampaign] = useState<any>(null);
 
   const {
     register,
@@ -90,6 +69,38 @@ const InviteRegister = () => {
     return `${min}:${sec}`;
   };
 
+  // Carregar dados da campanha
+  useEffect(() => {
+    const fetchCampaignData = async () => {
+      try {
+        setLoading(true);
+        const user = JSON.parse(localStorage.getItem("user") || "{}");
+        const userId = user.id;
+
+        if (!userId) {
+          toast.error("Usuário não encontrado");
+          return;
+        }
+
+        const response = await inviteService.generateInvite(userId);
+        setInviteLink(response.invite_token);
+
+        const token = response.invite_token.split("/").pop();
+        if (token) {
+          const campaignData = await inviteService.getCampaignByInviteToken(token);
+          setCampaign(campaignData);
+        }
+      } catch (error) {
+        toast.error("Erro ao carregar informações da campanha");
+        console.error(error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCampaignData();
+  }, []);
+
   // 📍 IBGE Estados e Cidades
   useEffect(() => {
     fetch("https://servicodados.ibge.gov.br/api/v1/localidades/estados")
@@ -115,434 +126,316 @@ const InviteRegister = () => {
   const handleNext = () => setStep((prev) => prev + 1);
   const handleBack = () => setStep((prev) => prev - 1);
 
-  const onSubmit = (data: FormType) => {
-    console.log(data);
-    toast.success("✅ Cadastro concluído com sucesso!");
+  const onSubmit = async (data: FormType) => {
+    try {
+      const inviteToken = inviteLink.split("/").pop();
+      if (!inviteToken) {
+        throw new Error("Token de convite não encontrado");
+      }
+
+      const formattedData = {
+        name: data.nome,
+        email: data.email,
+        password: data.senha,
+        phone: data.telefone.replace("+", ""), // Remove o + do número
+        gender: data.sexo || "",
+        contry: "BR", // Por padrão Brasil
+        city: data.cidade || "",
+        neighborhood: data.bairro || "",
+        invite_token: inviteToken
+      };
+
+      await inviteService.acceptInvite(formattedData);
+      toast.success("✅ Cadastro concluído com sucesso!");
+      
+      // Aguarda um pouco para o usuário ver a mensagem de sucesso
+      setTimeout(() => {
+        navigate("/login");
+      }, 2000);
+    } catch (error) {
+      console.error(error);
+      toast.error("Erro ao finalizar cadastro. Verifique os dados e tente novamente.");
+    }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center w-full h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-      </div>
-    );
-  }
-
-  if (!campaignData) {
-    return (
-      <div className="flex items-center justify-center w-full h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
         <div className="text-center">
-          <p className="text-xl text-gray-600">
-            Erro ao carregar informações do convite
-          </p>
-          <button
-            onClick={() => navigate("/")}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Voltar para a página inicial
-          </button>
+          <div className="animate-spin w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Carregando...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-500 to-blue-600 py-12 px-4 sm:px-6">
+    <div className="flex flex-col md:flex-row min-h-screen bg-gray-50 dark:bg-gray-900 transition-all">
       <ToastContainer position="top-right" autoClose={4000} />
-      <div className="max-w-7xl mx-auto">
-        <div className="relative bg-white rounded-2xl shadow-xl overflow-hidden">
-          <div className="grid md:grid-cols-2 gap-0">
-            {/* Banner */}
-            <div
-              className="relative p-8 text-white overflow-hidden"
-              style={{
-                background: campaignData.campaign.color_primary,
-              }}
-            >
-              {/* Background Image */}
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-10"
-                style={{
-                  backgroundImage: `url(${campaignData.campaign.logo})`,
-                }}
-              />
-
-              {/* Content */}
-              <div className="relative z-10 h-full flex flex-col">
-                <div className="flex-1">
-                  <img
-                    src={campaignData.campaign.logo}
-                    alt={campaignData.campaign.name}
-                    className="w-48 h-48 object-cover rounded-xl mb-8"
-                  />
-                  <h1 className="text-3xl font-bold mb-4">
-                    {campaignData.campaign.name}
-                  </h1>
-                  <p className="text-lg mb-6 opacity-90">
-                    {campaignData.campaign.description}
-                  </p>
-                  <div className="space-y-3 text-lg">
-                    <p><strong>Convidado por:</strong> {campaignData.inviter.name}</p>
-                  </div>
-                </div>
-
-                {/* Timer */}
-                {/* <div className="mt-8">
-                  {timer > 0 ? (
-                    <div className="inline-block bg-white bg-opacity-20 px-6 py-3 rounded-xl">
-                      <p>Tempo restante: {formatTimer()}</p>
-                    </div>
-                  ) : (
-                    <div className="bg-red-500 px-6 py-3 rounded-xl">
-                      <p>Tempo para aceitar o convite expirou!</p>
-                    </div>
-                  )}
-                </div> */}
+      {/* Banner */}
+      <div 
+        className="relative w-full md:w-1/2 flex items-center justify-center p-8 md:rounded-r-3xl overflow-hidden"
+        style={{
+          background: campaign ? `linear-gradient(to bottom right, ${campaign.campaign.color_primary}, ${campaign.campaign.color_primary}99)` : 'linear-gradient(to bottom right, #2563eb, #4f46e5)'
+        }}
+      >
+        {campaign && (
+          <img
+            src={campaign.campaign.logo}
+            alt={campaign.campaign.name}
+            className="absolute inset-0 object-cover opacity-40"
+          />
+        )}
+        <div className="relative z-10 text-center text-white">
+          {campaign ? (
+            <>
+              <h1 className="text-3xl font-bold mb-1">{campaign.campaign.name}</h1>
+              <p className="text-lg mb-4">{campaign.campaign.description}</p>
+              <div className="bg-white/10 p-4 rounded-lg backdrop-blur-md inline-block">
+                <p>
+                  <strong>Convidado por:</strong> {campaign.inviter.name}
+                </p>
+                {/* <p className="text-yellow-300 mt-1 text-sm">
+                  ⏳ Convite expira em: <strong>{formatTimer()}</strong>
+                </p> */}
               </div>
+            </>
+          ) : (
+            <div className="text-center">
+              <h1 className="text-3xl font-bold mb-4">Erro ao carregar campanha</h1>
+              <p>Não foi possível carregar as informações da campanha.</p>
             </div>
-
-            {/* Form */}
-            <div className="p-8">
-              <AnimatePresence mode="wait">
-                <motion.form
-                  key={step}
-                  initial={{ x: 50, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  exit={{ x: -50, opacity: 0 }}
-                  className="max-w-md mx-auto space-y-6"
-                  onSubmit={handleSubmit(onSubmit)}
-                >
-                  {step === 1 && (
-                    <>
-                      <h2 className="text-2xl font-bold mb-6 text-gray-800">
-                        Dados Pessoais
-                      </h2>
-
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Nome Completo
-                          </label>
-                          <div className="relative">
-                            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">
-                              <User size={20} />
-                            </span>
-                            <input
-                              type="text"
-                              {...register("nome")}
-                              className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                                errors.nome
-                                  ? "border-red-500"
-                                  : "border-gray-300"
-                              }`}
-                              placeholder="Digite seu nome completo"
-                            />
-                          </div>
-                          {errors.nome && (
-                            <p className="mt-1 text-sm text-red-600">
-                              {errors.nome.message}
-                            </p>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            E-mail
-                          </label>
-                          <div className="relative">
-                            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">
-                              <Mail size={20} />
-                            </span>
-                            <input
-                              type="email"
-                              {...register("email")}
-                              className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                                errors.email
-                                  ? "border-red-500"
-                                  : "border-gray-300"
-                              }`}
-                              placeholder="Digite seu e-mail"
-                            />
-                          </div>
-                          {errors.email && (
-                            <p className="mt-1 text-sm text-red-600">
-                              {errors.email.message}
-                            </p>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Telefone
-                          </label>
-                          <PhoneInput
-                            country={"br"}
-                            value={watch("telefone")}
-                            onChange={(phone) => setValue("telefone", phone)}
-                            containerClass="phone-input"
-                            inputClass={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                              errors.telefone
-                                ? "border-red-500"
-                                : "border-gray-300"
-                            }`}
-                          />
-                          {errors.telefone && (
-                            <p className="mt-1 text-sm text-red-600">
-                              {errors.telefone.message}
-                            </p>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Sexo
-                          </label>
-                          <div className="relative">
-                            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">
-                              <User size={20} />
-                            </span>
-                            <select
-                              {...register("sexo")}
-                              className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                                errors.sexo
-                                  ? "border-red-500"
-                                  : "border-gray-300"
-                              }`}
-                            >
-                              <option value="">Selecione seu sexo</option>
-                              <option value="M">Masculino</option>
-                              <option value="F">Feminino</option>
-                              <option value="NI">Prefiro não informar</option>
-                            </select>
-                          </div>
-                          {errors.sexo && (
-                            <p className="mt-1 text-sm text-red-600">
-                              {errors.sexo.message}
-                            </p>
-                          )}
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={handleNext}
-                          className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                          style={{
-                            backgroundColor: campaignData.campaign.color_primary,
-                          }}
-                        >
-                          Próximo
-                          <ChevronRight size={20} />
-                        </button>
-                      </div>
-                    </>
-                  )}
-
-                  {step === 2 && (
-                    <>
-                      <h2 className="text-2xl font-bold mb-6 text-gray-800">
-                        Localização
-                      </h2>
-
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Estado
-                          </label>
-                          <div className="relative">
-                            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">
-                              <MapPin size={20} />
-                            </span>
-                            <select
-                              {...register("estado")}
-                              className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                                errors.estado
-                                  ? "border-red-500"
-                                  : "border-gray-300"
-                              }`}
-                            >
-                              <option value="">Selecione seu estado</option>
-                              {estados.map((estado) => (
-                                <option key={estado.id} value={estado.id}>
-                                  {estado.nome}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          {errors.estado && (
-                            <p className="mt-1 text-sm text-red-600">
-                              {errors.estado.message}
-                            </p>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Cidade
-                          </label>
-                          <div className="relative">
-                            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">
-                              <MapPin size={20} />
-                            </span>
-                            <select
-                              {...register("cidade")}
-                              className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                                errors.cidade
-                                  ? "border-red-500"
-                                  : "border-gray-300"
-                              }`}
-                            >
-                              <option value="">Selecione sua cidade</option>
-                              {cidades.map((cidade) => (
-                                <option key={cidade.id} value={cidade.id}>
-                                  {cidade.nome}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          {errors.cidade && (
-                            <p className="mt-1 text-sm text-red-600">
-                              {errors.cidade.message}
-                            </p>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Bairro
-                          </label>
-                          <div className="relative">
-                            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">
-                              <MapPin size={20} />
-                            </span>
-                            <input
-                              type="text"
-                              {...register("bairro")}
-                              className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                                errors.bairro
-                                  ? "border-red-500"
-                                  : "border-gray-300"
-                              }`}
-                              placeholder="Digite seu bairro"
-                            />
-                          </div>
-                          {errors.bairro && (
-                            <p className="mt-1 text-sm text-red-600">
-                              {errors.bairro.message}
-                            </p>
-                          )}
-                        </div>
-
-                        <div className="flex gap-4">
-                          <button
-                            type="button"
-                            onClick={handleBack}
-                            className="w-1/2 py-2 px-4 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
-                          >
-                            Voltar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleNext}
-                            className="w-1/2 py-2 px-4 text-white rounded-lg hover:opacity-90 transition-colors"
-                            style={{
-                              backgroundColor: campaignData.campaign.color_primary,
-                            }}
-                          >
-                            Próximo
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {step === 3 && (
-                    <>
-                      <h2 className="text-2xl font-bold mb-6 text-gray-800">
-                        Defina sua senha
-                      </h2>
-
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Senha
-                          </label>
-                          <div className="relative">
-                            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">
-                              <Lock size={20} />
-                            </span>
-                            <input
-                              type="password"
-                              {...register("senha")}
-                              className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                                errors.senha
-                                  ? "border-red-500"
-                                  : "border-gray-300"
-                              }`}
-                              placeholder="Digite sua senha"
-                            />
-                          </div>
-                          {errors.senha && (
-                            <p className="mt-1 text-sm text-red-600">
-                              {errors.senha.message}
-                            </p>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Confirme sua senha
-                          </label>
-                          <div className="relative">
-                            <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">
-                              <Lock size={20} />
-                            </span>
-                            <input
-                              type="password"
-                              {...register("confirmarSenha")}
-                              className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
-                                errors.confirmarSenha
-                                  ? "border-red-500"
-                                  : "border-gray-300"
-                              }`}
-                              placeholder="Confirme sua senha"
-                            />
-                          </div>
-                          {errors.confirmarSenha && (
-                            <p className="mt-1 text-sm text-red-600">
-                              {errors.confirmarSenha.message}
-                            </p>
-                          )}
-                        </div>
-
-                        <div className="flex gap-4">
-                          <button
-                            type="button"
-                            onClick={handleBack}
-                            className="w-1/2 py-2 px-4 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
-                          >
-                            Voltar
-                          </button>
-                          <button
-                            type="submit"
-                            className="w-1/2 py-2 px-4 text-white rounded-lg hover:opacity-90 transition-colors"
-                            style={{
-                              backgroundColor: campaignData.campaign.color_primary,
-                            }}
-                          >
-                            Concluir
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </motion.form>
-              </AnimatePresence>
-            </div>
-          </div>
+          )}
         </div>
+      </div>
+
+      {/* Formulário */}
+      <div className="flex flex-col w-full md:w-1/2 justify-center px-8 py-10">
+        <h2 className="text-3xl font-bold text-center mb-6 text-gray-800 dark:text-gray-100">
+          Cadastro de Participante
+        </h2>
+
+        {/* Progresso */}
+        <div className="flex justify-center mb-6">
+          {[1, 2, 3].map((s) => (
+            <div
+              key={s}
+              className={`h-2 w-14 mx-1 rounded-full transition-all ${
+                s <= step ? "" : "bg-gray-300 dark:bg-gray-700"
+              }`}
+              style={s <= step ? {
+                backgroundColor: campaign?.campaign.color_primary || '#2563eb'
+              } : {}}
+            ></div>
+          ))}
+        </div>
+
+        <form onSubmit={handleSubmit(onSubmit)} className="max-w-lg mx-auto space-y-6">
+          <AnimatePresence mode="wait">
+            {/* Etapa 1 */}
+            {step === 1 && (
+              <motion.div
+                key="step1"
+                initial={{ opacity: 0, x: 30 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -30 }}
+                transition={{ duration: 0.3 }}
+                className="space-y-5"
+              >
+                <InputLarge
+                  icon={<User />}
+                  placeholder="Nome completo"
+                  {...register("nome")}
+                  error={errors.nome?.message}
+                  campaign={campaign}
+                />
+                <InputLarge
+                  icon={<Mail />}
+                  type="email"
+                  placeholder="E-mail"
+                  {...register("email")}
+                  error={errors.email?.message}
+                  campaign={campaign}
+                />
+                <div>
+                  <PhoneInput
+                    country={"br"}
+                    value={watch("telefone")}
+                    onChange={(value) => setValue("telefone", value)}
+                    inputClass="!w-full !p-4 !pl-16 !text-lg !border !rounded-lg !border-gray-300 dark:!bg-gray-800 dark:!text-white"
+                    buttonClass="!border-gray-300 dark:!border-gray-700"
+                    inputStyle={{ width: "100%", height: "60px", paddingLeft: "64px" }}
+                  />
+                  {errors.telefone && (
+                    <p className="text-red-500 text-sm mt-1">
+                      {errors.telefone.message}
+                    </p>
+                  )}
+                </div>
+                <select
+                  {...register("sexo")}
+                  className="w-full p-4 text-lg border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                >
+                  <option value="">Selecione o sexo</option>
+                  <option value="Masculino">Masculino</option>
+                  <option value="Feminino">Feminino</option>
+                  <option value="Outro">Outro</option>
+                </select>
+                {errors.sexo && (
+                  <p className="text-red-500 text-sm">{errors.sexo.message}</p>
+                )}
+                <Button onClick={handleNext} text="Próximo" campaign={campaign} />
+              </motion.div>
+            )}
+
+            {/* Etapa 2 */}
+            {step === 2 && (
+              <motion.div
+                key="step2"
+                initial={{ opacity: 0, x: 30 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -30 }}
+                transition={{ duration: 0.3 }}
+                className="space-y-5"
+              >
+                <div className="flex gap-2">
+                  <select
+                    {...register("estado")}
+                    className="w-1/2 p-4 text-lg border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                  >
+                    <option value="">Estado</option>
+                    {estados.map((e) => (
+                      <option key={e.id} value={e.sigla}>
+                        {e.nome}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    {...register("cidade")}
+                    className="w-1/2 p-4 text-lg border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                  >
+                    <option value="">Cidade</option>
+                    {cidades.map((c) => (
+                      <option key={c.id} value={c.nome}>
+                        {c.nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <InputLarge
+                  icon={<MapPin />}
+                  placeholder="Bairro"
+                  {...register("bairro")}
+                  error={errors.bairro?.message}
+                  campaign={campaign}
+                />
+                <div className="flex justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={handleBack}
+                    className="text-white px-4 py-3 text-lg rounded-md hover:opacity-90 transition flex items-center justify-center gap-2 w-1/2"
+                    style={{
+                      backgroundColor: campaign?.campaign?.color_primary || '#2563eb'
+                    }}
+                  >
+                    Voltar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleNext}
+                    className="text-white px-4 py-3 text-lg rounded-md hover:opacity-90 transition flex items-center justify-center gap-2 w-1/2"
+                    style={{
+                      backgroundColor: campaign?.campaign?.color_primary || '#2563eb'
+                    }}
+                  >
+                    Próximo <ChevronRight className="w-5" />
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Etapa 3 */}
+            {step === 3 && (
+              <motion.div
+                key="step3"
+                initial={{ opacity: 0, x: 30 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -30 }}
+                transition={{ duration: 0.3 }}
+                className="space-y-5"
+              >
+                <InputLarge
+                  icon={<Lock />}
+                  type="password"
+                  placeholder="Senha"
+                  {...register("senha")}
+                  error={errors.senha?.message}
+                  campaign={campaign}
+                />
+                <InputLarge
+                  icon={<Lock />}
+                  type="password"
+                  placeholder="Confirmar senha"
+                  {...register("confirmarSenha")}
+                  error={errors.confirmarSenha?.message}
+                  campaign={campaign}
+                />
+                <div className="flex justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={handleBack}
+                    className="text-white p-4 text-lg rounded-md hover:opacity-90 transition flex items-center justify-center gap-2 w-1/2"
+                    style={{
+                      backgroundColor: campaign?.campaign?.color_primary || '#2563eb'
+                    }}
+                  >
+                    Voltar
+                  </button>
+                  <button
+                    type="submit"
+                    className="text-white p-4 text-lg rounded-md hover:opacity-90 transition flex items-center justify-center gap-2 w-1/2"
+                    style={{
+                      backgroundColor: campaign?.campaign?.color_primary || '#2563eb'
+                    }}
+                  >
+                    Finalizar Cadastro
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </form>
       </div>
     </div>
   );
 };
 
-export default InviteRegister;
+// 🔧 Componentes auxiliares
+const InputLarge = ({ icon, error, campaign, ...props }: any) => (
+  <div>
+    <div className="flex items-center gap-3 border rounded-lg p-4 text-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white">
+      <span style={{ color: campaign?.campaign?.color_primary || '#2563eb' }}>{icon}</span>
+      <input {...props} className="w-full bg-transparent outline-none focus:outline-none" 
+        style={{
+          caretColor: campaign?.campaign?.color_primary || '#2563eb'
+        }}
+      />
+    </div>
+    {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
+  </div>
+);
+
+const Button = ({ onClick, text, campaign }: any) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="w-full text-white p-4 text-lg rounded-md hover:opacity-90 transition flex items-center justify-center gap-2"
+    style={{
+      backgroundColor: campaign?.campaign?.color_primary || '#2563eb',
+    }}
+  >
+    {text} <ChevronRight className="w-5" />
+  </button>
+);
+
+export default Invites;

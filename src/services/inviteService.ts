@@ -31,6 +31,18 @@ interface CampaignResponse {
   campaign: Campaign;
 }
 
+interface AcceptInviteParams {
+  name: string;
+  email: string;
+  password: string;
+  phone: string;
+  gender?: string;
+  contry?: string;
+  city?: string;
+  neighborhood?: string;
+  invite_token: string;
+}
+
 export const inviteService = {
   async generateInvite(userId: string): Promise<InviteResponse> {
     const response = await api.get(`api/invite/generate/${userId}`);
@@ -41,6 +53,11 @@ export const inviteService = {
     const response = await api.post('api/invite/campaign', {
       invite_token: inviteToken
     });
+    return response.data;
+  },
+
+  async acceptInvite(data: AcceptInviteParams): Promise<any> {
+    const response = await api.post('api/invite/accept', data);
     return response.data;
   }
 };
