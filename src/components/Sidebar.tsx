@@ -13,6 +13,9 @@ import {
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTheme } from "../context/ThemeContext";
+import { authService } from "../services/authService";
+import { sessionService } from "../services/sessionService";
+import { toast } from "react-toastify";
 import type { ReactNode } from "react";
 
 type SidebarItemProps = {
@@ -73,10 +76,19 @@ const Sidebar = () => {
   const toggleSidebar = () => setIsOpen(!isOpen);
   const toggleMobile = () => setMobileOpen(!mobileOpen);
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    navigate("/login");
+  const handleLogout = async () => {
+    try {
+      // Tenta fazer logout no servidor (rota API /auth/logout)
+      await authService.logout();
+    } catch (err) {
+      // Mesmo se a chamada falhar, continuamos e limpamos a sessão local
+      console.warn("Logout API falhou, limpando sessão local", err);
+      toast.error("Erro ao desconectar do servidor. Saindo localmente...");
+    } finally {
+      // Limpa sessão local e redireciona para login
+      sessionService.clearSession();
+      navigate("/login");
+    }
   };
 
   return (

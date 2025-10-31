@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast, ToastContainer } from "react-toastify";
-import { useTheme } from "../../context/ThemeContext";
+// import { useTheme } from "../../context/ThemeContext";
 import { useNavigate } from "react-router-dom";
 import { inviteService } from "../../services/inviteService";
 
@@ -33,10 +33,10 @@ const formSchema = z.object({
 type FormType = z.infer<typeof formSchema>;
 
 const Invites = () => {
-  const { darkMode } = useTheme();
+  // const { darkMode } = useTheme();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
-  const [timer, setTimer] = useState(600);
+  // const [timer, setTimer] = useState(600);
   const [estados, setEstados] = useState<any[]>([]);
   const [cidades, setCidades] = useState<any[]>([]);
   const [inviteLink, setInviteLink] = useState("");
@@ -54,20 +54,20 @@ const Invites = () => {
   });
 
   // 🕒 Timer regressivo
-  useEffect(() => {
-    const countdown = setInterval(() => {
-      setTimer((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(countdown);
-  }, []);
+  // useEffect(() => {
+  //   const countdown = setInterval(() => {
+  //     setTimer((prev) => (prev > 0 ? prev - 1 : 0));
+  //   }, 1000);
+  //   return () => clearInterval(countdown);
+  // }, []);
 
-  const formatTimer = () => {
-    const min = Math.floor(timer / 60)
-      .toString()
-      .padStart(2, "0");
-    const sec = (timer % 60).toString().padStart(2, "0");
-    return `${min}:${sec}`;
-  };
+  // const formatTimer = () => {
+  //   const min = Math.floor(timer / 60)
+  //     .toString()
+  //     .padStart(2, "0");
+  //   const sec = (timer % 60).toString().padStart(2, "0");
+  //   return `${min}:${sec}`;
+  // };
 
   // Carregar dados da campanha
   useEffect(() => {

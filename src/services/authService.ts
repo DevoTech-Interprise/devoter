@@ -10,4 +10,15 @@ export const authService = {
       throw messages;
     }
   }
+  ,
+  async logout() {
+    try {
+      const response = await api.post('api/auth/logout');
+      return response.data;
+    } catch (err: any) {
+      // Não propagar o erro para que o cliente ainda limpe a sessão localmente
+      console.error('Logout API falhou', err);
+      throw err;
+    }
+  }
 };

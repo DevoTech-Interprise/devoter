@@ -4,7 +4,7 @@ import { sessionService } from './sessionService';
 import { toast } from 'react-toastify';
 
 const api = axios.create({
-  baseURL: 'http://apiconecta.devotech.com.br/',
+  baseURL: 'https://apiconecta.devotech.com.br/',
 });
 
 
