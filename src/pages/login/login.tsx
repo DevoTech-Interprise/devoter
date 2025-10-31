@@ -9,6 +9,7 @@ import { authService } from "../../services/authService";
 import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
 import { loginSchema, type LoginFormData } from "../../schemas/auth";
+import { sessionService } from "../../services/sessionService";
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -44,15 +45,17 @@ const Login: React.FC = () => {
         "user",
         JSON.stringify({
           token: response.access_token,
-          name: response.name,
-          email: response.email,
-          tenant_id: response.tenant_id,
+          name: response.user.name,
+          email: response.user.email,
+          id: response.user.id,
         })
       );
 
       localStorage.setItem("token", response.access_token);
+      // Inicializa a sessão com o tempo de expiração fornecido pela API
+      sessionService.updateLastActivity(response.expires_in);
       toast.success("Login realizado com sucesso!");
-      navigate("/Dashboard");
+      navigate("/dashboard");
     } catch (error: any) {
       let errorMessage = "Email ou telefone incorreto ou senha inválida.";
 

@@ -1,6 +1,7 @@
 
 import axios from 'axios';
-
+import { sessionService } from './sessionService';
+import { toast } from 'react-toastify';
 
 const api = axios.create({
   baseURL: 'http://apiconecta.devotech.com.br/',
@@ -9,9 +10,22 @@ const api = axios.create({
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
-  if (token) {
+  
+  // Verifica se há um token e se não é uma requisição de login
+  if (token && !config.url?.includes('auth/login')) {
+    // Verifica se a sessão expirou
+    if (sessionService.isSessionExpired()) {
+      sessionService.clearSession();
+      window.location.href = '/login';
+      toast.error('Sua sessão expirou. Por favor, faça login novamente.');
+      throw new Error('Sessão expirada');
+    }
+    
+    // Atualiza o timestamp da última atividade
+    sessionService.updateLastActivity();
     config.headers.Authorization = `Bearer ${token}`;
   }
+  
   return config;
 });
 

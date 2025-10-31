@@ -11,15 +11,73 @@ import {
   Moon,
   Sun,
 } from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useTheme } from "../context/ThemeContext";
+import type { ReactNode } from "react";
+
+type SidebarItemProps = {
+  icon: ReactNode;
+  text: string;
+  path?: string;
+  isOpen: boolean;
+  extraClass?: string;
+  onClick?: () => void;
+};
+
+const SidebarItem = ({ 
+  icon, 
+  text, 
+  path, 
+  isOpen, 
+  extraClass = "", 
+  onClick 
+}: SidebarItemProps) => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { darkMode } = useTheme();
+  const isActive = path ? location.pathname.startsWith(path) : false;
+
+  const handleClick = () => {
+    if (onClick) {
+      onClick();
+    } else if (path) {
+      navigate(path);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      className={`flex items-center gap-3 w-full p-3 rounded-lg transition
+        ${isActive 
+          ? "bg-blue-600 text-white" 
+          : darkMode 
+            ? "hover:bg-gray-800" 
+            : "hover:bg-blue-50"
+        }
+        ${!isOpen ? "justify-center" : ""}
+        ${extraClass}`}
+    >
+      <span className={isActive ? "text-white" : "text-blue-600"}>{icon}</span>
+      {isOpen && <span className="text-sm font-medium">{text}</span>}
+    </button>
+  );
+};
 
 const Sidebar = () => {
   const [isOpen, setIsOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { darkMode, toggleDarkMode } = useTheme();
+  const navigate = useNavigate();
 
   const toggleSidebar = () => setIsOpen(!isOpen);
   const toggleMobile = () => setMobileOpen(!mobileOpen);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    navigate("/login");
+  };
 
   return (
     <>
@@ -42,7 +100,7 @@ const Sidebar = () => {
       {/* Sidebar */}
       <aside
         className={`fixed md:static z-50 h-full transition-all duration-300 flex flex-col
-          ${darkMode ? "bg-gray-900  text-gray-100" : "bg-white  text-gray-800"}
+          ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-800"}
           ${isOpen ? "w-64" : "w-20"}
           ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
            shadow-lg`}
@@ -66,11 +124,36 @@ const Sidebar = () => {
 
         {/* Navegação */}
         <nav className="flex-1 flex flex-col p-4 space-y-2 overflow-y-auto">
-          <SidebarItem icon={<Home size={20} />} text="Dashboard" isOpen={isOpen} />
-          <SidebarItem icon={<Users size={20} />} text="Apoiadores" isOpen={isOpen} />
-          <SidebarItem icon={<Award size={20} />} text="Candidaturas" isOpen={isOpen} />
-          <SidebarItem icon={<Send size={20} />} text="Convites" isOpen={isOpen} />
-          <SidebarItem icon={<Activity size={20} />} text="Engajamento" isOpen={isOpen} />
+          <SidebarItem 
+            icon={<Home size={20} />} 
+            text="Dashboard" 
+            path="/dashboard"
+            isOpen={isOpen} 
+          />
+          <SidebarItem 
+            icon={<Award size={20} />} 
+            text="Campanhas" 
+            path="/campanhas"
+            isOpen={isOpen} 
+          />
+          <SidebarItem 
+            icon={<Send size={20} />} 
+            text="Convites" 
+            path="/convites"
+            isOpen={isOpen} 
+          />
+          <SidebarItem 
+            icon={<Users size={20} />} 
+            text="Apoiadores" 
+            path="/apoiadores"
+            isOpen={isOpen} 
+          />
+          <SidebarItem 
+            icon={<Activity size={20} />} 
+            text="Engajamento" 
+            path="/engajamento"
+            isOpen={isOpen} 
+          />
         </nav>
 
         {/* Rodapé: Switch de Tema + Sair */}
@@ -98,32 +181,12 @@ const Sidebar = () => {
             text="Sair"
             isOpen={isOpen}
             extraClass="mt-2"
+            onClick={handleLogout}
           />
         </div>
       </aside>
     </>
   );
 };
-
-const SidebarItem = ({
-  icon,
-  text,
-  isOpen,
-  extraClass = "",
-}: {
-  icon: React.ReactNode;
-  text: string;
-  isOpen: boolean;
-  extraClass?: string;
-}) => (
-  <button
-    className={`flex items-center gap-3 w-full p-3 rounded-lg transition
-      ${isOpen ? "justify-start" : "justify-center"}
-      hover:bg-blue-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200 ${extraClass}`}
-  >
-    {icon}
-    {isOpen && <span className="text-sm font-medium">{text}</span>}
-  </button>
-);
 
 export default Sidebar;

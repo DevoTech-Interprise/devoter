@@ -6,6 +6,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 import Login from "./pages/login/login";
 import Dashboard from "./pages/dashboard/dashboard";
 import InvitePage from "./pages/invite/invite";
+import Invites from "./pages/invites/invites";
 
 
 function App() {
@@ -27,10 +28,18 @@ function App() {
             }
           />
           <Route
+            path="/invite/:token"
+            element={<InvitePage />}
+          />
+          <Route
             path="/invite"
+            element={<InvitePage />}
+          />
+          <Route
+            path="/convites"
             element={
               <PrivateRoute>
-                <InvitePage />
+                <Invites />
               </PrivateRoute>
             }
           />
