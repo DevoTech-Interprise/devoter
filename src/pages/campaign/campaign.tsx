@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, ImagePlus, Palette, Loader2, Edit2, Plus } from 'lucide-react';
+import { X, Palette, Loader2, Edit2, Plus } from 'lucide-react';
 import Sidebar from '../../components/Sidebar';
 import { campaignService } from '../../services/campaignService';
 import type { CampaignPayload } from '../../services/campaignService';
@@ -19,7 +19,7 @@ type Campaign = {
 const CampaignsPage = () => {
     const [campaigns, setCampaigns] = useState<Campaign[]>([]);
     const [loading, setLoading] = useState(false);
-
+    const [imageValid, setImageValid] = useState(true);
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<Campaign | null>(null);
     const [form, setForm] = useState<CampaignPayload>({
@@ -78,6 +78,12 @@ const CampaignsPage = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (!imageValid) {
+            toast.error("A imagem selecionada não está nas dimensões ou proporções corretas!");
+            return;
+        }
+
         try {
             const user = JSON.parse(localStorage.getItem('user') || '{}');
             const created_by = user?.id || user?.ID || undefined;
@@ -100,18 +106,21 @@ const CampaignsPage = () => {
         }
     };
 
+
     return (
         <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
             <Sidebar />
             <div className="flex-1 overflow-auto p-8">
                 <ToastContainer position="top-right" />
                 <div className="max-w-5xl mx-auto">
-                    <header className="flex items-center justify-between mb-8">
-                        <div>
+                    <header className="flex pt-7 flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
+                        <div className="flex flex-col">
                             <h1 className="text-3xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
                                 <Palette className="w-7 h-7 text-blue-600" /> Campanhas
                             </h1>
-                            <p className="mt-2 text-gray-600 dark:text-gray-300">Gerencie suas campanhas: criar, editar e visualizar.</p>
+                            <p className="mt-2 text-gray-600 dark:text-gray-300">
+                                Gerencie suas campanhas: criar, editar e visualizar.
+                            </p>
                         </div>
                         <button
                             onClick={openCreate}
@@ -120,6 +129,7 @@ const CampaignsPage = () => {
                             <Plus className="w-5 h-5" /> Nova Campanha
                         </button>
                     </header>
+
 
                     <section>
                         {loading ? (
@@ -132,7 +142,7 @@ const CampaignsPage = () => {
                                 {campaigns.map(c => (
                                     <div
                                         key={c.id}
-                                        className="group rounded-xl shadow-lg bg-white dark:bg-gray-800 pt-14 pb-6 px-6 transition hover:shadow-xl hover:-translate-y-1 border border-gray-100 dark:border-gray-700 relative h-[220px]"
+                                        className="group rounded-xl shadow-lg bg-white dark:bg-gray-800 pt-14 pb-6 px-6 transition hover:shadow-xl hover:-translate-y-1 border border-gray-100 dark:border-gray-700 relative"
                                     >
                                         <button
                                             onClick={() => openEdit(c)}
@@ -141,31 +151,40 @@ const CampaignsPage = () => {
                                         >
                                             <Edit2 className="w-4 h-4" /> Editar
                                         </button>
-                                        <div className="flex gap-6 h-full items-stretch">
-                                            <div className="relative h-full flex-shrink-0">
+                                        <div className="flex flex-col sm:flex-row gap-6 h-full items-stretch">
+                                            <div className="relative flex-shrink-0 w-full sm:w-[140px] h-40 sm:h-full">
                                                 <img
                                                     src={c.logo}
                                                     alt={c.name}
-                                                    className="object-cover rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm transition-transform group-hover:scale-105 h-full"
-                                                    style={{ width: 140, minWidth: 140, height: '100%', objectFit: 'cover' }}
+                                                    className="object-cover rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm w-full h-full"
                                                 />
-                                                <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-xs px-2 py-1 rounded shadow">Logo</span>
+                                                <span className="absolute -top-1 -right-2 bg-blue-600 text-white text-xs px-2 py-1 rounded shadow">
+                                                    Logo
+                                                </span>
                                             </div>
-                                            <div className="flex-1 flex flex-col h-full">
-                                                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 break-words" title={c.name}>
+                                            <div className="flex-1 flex flex-col min-w-0 h-full">
+                                                <h3
+                                                    className="text-xl font-bold text-gray-900 dark:text-white mb-2 break-words truncate"
+                                                    title={c.name}
+                                                >
                                                     {c.name}
                                                 </h3>
-                                                <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3 mb-4 flex-grow">{c.description}</p>
-                                                <div className="flex gap-3 items-center">
+                                                <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3 mb-4 flex-grow overflow-hidden">
+                                                    {c.description}
+                                                </p>
+                                                <div className="flex gap-3 items-center flex-wrap">
                                                     <div className="rounded-lg border border-gray-200 dark:border-gray-700 flex items-center">
                                                         <div className="w-10 h-10 rounded-l-lg" style={{ backgroundColor: c.color_primary || '#FCAF15' }} />
                                                         <div className="w-10 h-10 rounded-r-lg" style={{ backgroundColor: c.color_secondary || '#0833AF' }} />
                                                     </div>
-                                                    <span className="text-sm font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">Cores da campanha</span>
+                                                    <span className="text-sm font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                                                        Cores da campanha
+                                                    </span>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
+
                                 ))}
                             </div>
                         )}
@@ -212,13 +231,40 @@ const CampaignsPage = () => {
                                                     accept="image/*"
                                                     onChange={(e) => {
                                                         const file = e.target.files?.[0];
-                                                        if (file) {
-                                                            setForm(prev => ({ ...prev, logo: file }));
-                                                        }
+                                                        if (!file) return;
+
+                                                        const img = new Image();
+                                                        img.src = URL.createObjectURL(file);
+
+                                                        img.onload = () => {
+                                                            const minWidth = 1200;  // largura mínima
+                                                            const minHeight = 400;  // altura mínima
+                                                            const ratio = 3 / 1;    // proporção desejada (3:1)
+
+                                                            const actualRatio = img.width / img.height;
+
+                                                            if (
+                                                                img.width < minWidth ||
+                                                                img.height < minHeight ||
+                                                                Math.abs(actualRatio - ratio) > 0.01 // tolerância de proporção
+                                                            ) {
+                                                                toast.error(
+                                                                    `Imagem inválida! Deve ter no mínimo ${minWidth}x${minHeight}px e proporção 3:1`
+                                                                );
+                                                                setForm(prev => ({ ...prev, logo: '' }));
+                                                                setImageValid(false);
+                                                            } else {
+                                                                setForm(prev => ({ ...prev, logo: file }));
+                                                                setImageValid(true);
+                                                            }
+                                                        };
                                                     }}
                                                     className="w-full text-sm text-gray-700 dark:text-gray-200"
-                                                    required={!editing} // se for edição, não obrigar reenvio
+                                                    required={!editing}
                                                 />
+
+
+
                                                 {form.logo && (
                                                     <img
                                                         src={form.logo instanceof File ? URL.createObjectURL(form.logo) : form.logo}

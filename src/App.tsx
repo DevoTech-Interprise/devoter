@@ -68,6 +68,9 @@ function App() {
               </PrivateRoute>
             }
           />
+
+          {/* ⚠️ Rota curinga (fallback) */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Router>
     </ThemeProvider>

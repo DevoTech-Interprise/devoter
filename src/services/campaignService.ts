@@ -15,6 +15,11 @@ export const campaignService = {
     return response.data;
   },
 
+  async getById(id: string | number) {
+    const response = await api.get(`api/campaigns/${id}`);
+    return response.data;
+  },
+
   async create(data: CampaignPayload) {
     const formData = new FormData();
     formData.append('name', data.name);
@@ -23,11 +28,10 @@ export const campaignService = {
     formData.append('color_secondary', data.color_secondary);
     if (data.created_by) formData.append('created_by', String(data.created_by));
 
-    // 👇 se for File, envia como arquivo; se for string (URL), envia como texto
     if (data.logo instanceof File) {
       formData.append('logo', data.logo);
     } else if (data.logo) {
-      formData.append('logo_url', data.logo); // opcional, caso ainda aceite URL
+      formData.append('logo_url', data.logo);
     }
 
     const response = await api.post('api/campaigns', formData, {
@@ -50,7 +54,7 @@ export const campaignService = {
       formData.append('logo_url', data.logo);
     }
 
-    const response = await api.post(`api/campaigns/${id}?_method=PUT`, formData, {
+    const response = await api.put(`api/campaigns/${id}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return response.data;

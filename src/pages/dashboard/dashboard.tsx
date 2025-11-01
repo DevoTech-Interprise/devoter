@@ -8,7 +8,7 @@ const Dashboard = () => {
 
   return (
     <div
-      className={`flex h-screen overflow-hidden transition-colors duration-300
+      className={`flex  h-screen overflow-hidden transition-colors duration-300
         ${darkMode ? "bg-gray-950 text-gray-100" : "bg-gray-50 text-gray-900"}
       `}
     >

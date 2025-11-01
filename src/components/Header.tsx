@@ -6,7 +6,7 @@ const Header = () => {
 
   return (
     <header
-      className={`flex items-center justify-between p-4 border-b shadow-sm transition-colors duration-300
+      className={`flex pl-15 md:pl-5 items-center justify-between p-4 border-b shadow-sm transition-colors duration-300
         ${darkMode ? "bg-gray-900 border-gray-700" : "bg-white border-gray-200"}
       `}
     >

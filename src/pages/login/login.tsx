@@ -34,28 +34,38 @@ const Login: React.FC = () => {
         password: data.password,
         ...(loginType === "email"
           ? { email: data.email }
-          : { phone: data.phone?.replace("+55", "") })
+          : { phone: data.phone?.replace("+55", "") }),
       };
 
       const response = await authService.login(loginData);
 
-      if (!response.access_token) throw new Error("Token não encontrado na resposta.");
+      if (!response.access_token)
+        throw new Error("Token não encontrado na resposta.");
 
-      localStorage.setItem(
-        "user",
-        JSON.stringify({
-          token: response.access_token,
-          name: response.user.name,
-          email: response.user.email,
-          id: response.user.id,
-        })
-      );
+      const userData = {
+        token: response.access_token,
+        name: response.user.name,
+        email: response.user.email,
+        id: response.user.id,
+        role: response.user.role,
+      };
 
+      localStorage.setItem("user", JSON.stringify(userData));
       localStorage.setItem("token", response.access_token);
+
       // Inicializa a sessão com o tempo de expiração fornecido pela API
       sessionService.updateLastActivity(response.expires_in);
+
       toast.success("Login realizado com sucesso!");
-      navigate("/dashboard");
+
+      // Redirecionamento baseado na role
+      if (userData.role === "admin") {
+        navigate("/dashboard");
+      } else if (userData.role === "user") {
+        navigate("/convites");
+      } else {
+        navigate("/"); // fallback para qualquer outra role
+      }
     } catch (error: any) {
       let errorMessage = "Email ou telefone incorreto ou senha inválida.";
 
@@ -69,16 +79,15 @@ const Login: React.FC = () => {
     }
   };
 
+
   return (
     <div
-      className={`min-h-screen flex items-center justify-center p-4 transition-colors duration-300 ${
-        darkMode ? "bg-gray-900 text-gray-100" : "bg-gray-100 text-gray-900"
-      }`}
+      className={`min-h-screen flex items-center justify-center p-4 transition-colors duration-300 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-gray-100 text-gray-900"
+        }`}
     >
       <div
-        className={`w-full max-w-md rounded-2xl shadow-lg overflow-hidden ${
-          darkMode ? "bg-gray-800" : "bg-white"
-        }`}
+        className={`w-full max-w-md rounded-2xl shadow-lg overflow-hidden ${darkMode ? "bg-gray-800" : "bg-white"
+          }`}
       >
         {/* HEADER */}
         <div
@@ -107,11 +116,10 @@ const Login: React.FC = () => {
                 setValue("email", "");
                 setValue("phone", "");
               }}
-              className={`px-3 py-1 rounded-full text-sm font-medium ${
-                loginType === "email"
+              className={`px-3 py-1 rounded-full text-sm font-medium ${loginType === "email"
                   ? "bg-blue-500 text-white"
                   : "bg-gray-200 dark:bg-gray-700 dark:text-gray-300"
-              }`}
+                }`}
             >
               Email
             </button>
@@ -122,11 +130,10 @@ const Login: React.FC = () => {
                 setValue("email", "");
                 setValue("phone", "");
               }}
-              className={`px-3 py-1 rounded-full text-sm font-medium ${
-                loginType === "phone"
+              className={`px-3 py-1 rounded-full text-sm font-medium ${loginType === "phone"
                   ? "bg-blue-500 text-white"
                   : "bg-gray-200 dark:bg-gray-700 dark:text-gray-300"
-              }`}
+                }`}
             >
               Telefone
             </button>
@@ -150,11 +157,10 @@ const Login: React.FC = () => {
                   type="email"
                   placeholder="you@example.com"
                   {...register("email")}
-                  className={`w-full pl-10 pr-3 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent ${
-                    darkMode
+                  className={`w-full pl-10 pr-3 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent ${darkMode
                       ? "bg-gray-700 border-gray-600 text-white focus:ring-blue-400"
                       : "bg-white border-gray-300 text-gray-700 focus:ring-primary-500"
-                  }`}
+                    }`}
                 />
               </div>
               {errors.email && (
@@ -212,11 +218,10 @@ const Login: React.FC = () => {
                 type={showPassword ? "text" : "password"}
                 placeholder="••••••••"
                 {...register("password")}
-                className={`w-full pl-10 pr-10 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent ${
-                  darkMode
+                className={`w-full pl-10 pr-10 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent ${darkMode
                     ? "bg-gray-700 border-gray-600 text-white focus:ring-blue-400"
                     : "bg-white border-gray-300 text-gray-700 focus:ring-primary-500"
-                }`}
+                  }`}
               />
               <button
                 type="button"

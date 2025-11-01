@@ -58,7 +58,7 @@ const SidebarItem = ({
             ? "hover:bg-gray-800" 
             : "hover:bg-blue-50"
         }
-        ${!isOpen ? "justify-center" : ""}
+        ${!isOpen ? "justify-center" : ""} 
         ${extraClass}`}
     >
       <span className={isActive ? "text-white" : "text-blue-600"}>{icon}</span>
@@ -78,18 +78,28 @@ const Sidebar = () => {
 
   const handleLogout = async () => {
     try {
-      // Tenta fazer logout no servidor (rota API /auth/logout)
       await authService.logout();
     } catch (err) {
-      // Mesmo se a chamada falhar, continuamos e limpamos a sessão local
       console.warn("Logout API falhou, limpando sessão local", err);
       toast.error("Erro ao desconectar do servidor. Saindo localmente...");
     } finally {
-      // Limpa sessão local e redireciona para login
       sessionService.clearSession();
       navigate("/login");
     }
   };
+
+  // Pegando a role do usuário
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const role = user?.role || "user";
+
+  // Itens do menu com roles permitidas
+  const menuItems = [
+    { icon: <Home size={20} />, text: "Dashboard", path: "/dashboard", roles: ["admin"] },
+    { icon: <Award size={20} />, text: "Campanhas", path: "/campanhas", roles: ["admin"] },
+    { icon: <Send size={20} />, text: "Convites", path: "/convites", roles: ["admin", "user"] },
+    { icon: <Users size={20} />, text: "Apoiadores", path: "/apoiadores", roles: ["admin", "user"] },
+    { icon: <Activity size={20} />, text: "Engajamento", path: "/engajamento", roles: ["admin"] },
+  ];
 
   return (
     <>
@@ -115,10 +125,10 @@ const Sidebar = () => {
           ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-800"}
           ${isOpen ? "w-64" : "w-20"}
           ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
-           shadow-lg`}
+          shadow-lg`}
       >
         {/* Cabeçalho */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between p-5 border-b border-gray-200 dark:border-gray-700">
           <h1
             className={`text-xl font-bold text-blue-600 transition-all duration-300 ${
               isOpen ? "opacity-100" : "opacity-0 hidden"
@@ -128,7 +138,10 @@ const Sidebar = () => {
           </h1>
           <button
             onClick={toggleSidebar}
-            className="hidden md:block text-gray-500 dark:text-gray-300 hover:text-blue-600"
+            className={`
+              hidden md:block text-gray-500 dark:text-gray-300 hover:text-blue-600
+              ${!isOpen ? "p-1.5" : ""}
+              `}
           >
             {isOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
@@ -136,36 +149,17 @@ const Sidebar = () => {
 
         {/* Navegação */}
         <nav className="flex-1 flex flex-col p-4 space-y-2 overflow-y-auto">
-          <SidebarItem 
-            icon={<Home size={20} />} 
-            text="Dashboard" 
-            path="/dashboard"
-            isOpen={isOpen} 
-          />
-          <SidebarItem 
-            icon={<Award size={20} />} 
-            text="Campanhas" 
-            path="/campanhas"
-            isOpen={isOpen} 
-          />
-          <SidebarItem 
-            icon={<Send size={20} />} 
-            text="Convites" 
-            path="/convites"
-            isOpen={isOpen} 
-          />
-          <SidebarItem 
-            icon={<Users size={20} />} 
-            text="Apoiadores" 
-            path="/apoiadores"
-            isOpen={isOpen} 
-          />
-          <SidebarItem 
-            icon={<Activity size={20} />} 
-            text="Engajamento" 
-            path="/engajamento"
-            isOpen={isOpen} 
-          />
+          {menuItems
+            .filter(item => item.roles.includes(role))
+            .map(item => (
+              <SidebarItem
+                key={item.text}
+                icon={item.icon}
+                text={item.text}
+                path={item.path}
+                isOpen={isOpen}
+              />
+            ))}
         </nav>
 
         {/* Rodapé: Switch de Tema + Sair */}

@@ -74,22 +74,20 @@ const Invites = () => {
     const fetchCampaignData = async () => {
       try {
         setLoading(true);
-        const user = JSON.parse(localStorage.getItem("user") || "{}");
-        const userId = user.id;
 
-        if (!userId) {
-          toast.error("Usuário não encontrado");
+        // 🔹 Pega o token da URL atual
+        const currentUrl = window.location.href;
+        const token = currentUrl.split("/").pop(); // ex: "094b304c9e95632c7502dc3dc19bda32"
+
+        if (!token) {
+          toast.error("Token de convite não encontrado na URL");
           return;
         }
 
-        const response = await inviteService.generateInvite(userId);
-        setInviteLink(response.invite_token);
-
-        const token = response.invite_token.split("/").pop();
-        if (token) {
-          const campaignData = await inviteService.getCampaignByInviteToken(token);
-          setCampaign(campaignData);
-        }
+        // 🔹 Busca os dados da campanha com base no token
+        const campaignData = await inviteService.getCampaignByInviteToken(token);
+        setCampaign(campaignData);
+        setInviteLink(currentUrl); // opcional — mantém o link completo se precisar
       } catch (error) {
         toast.error("Erro ao carregar informações da campanha");
         console.error(error);
@@ -100,6 +98,7 @@ const Invites = () => {
 
     fetchCampaignData();
   }, []);
+
 
   // 📍 IBGE Estados e Cidades
   useEffect(() => {
@@ -139,7 +138,8 @@ const Invites = () => {
         password: data.senha,
         phone: data.telefone.replace("+", ""), // Remove o + do número
         gender: data.sexo || "",
-        contry: "BR", // Por padrão Brasil
+        country: "BR", // Por padrão Brasil
+        state: data.estado || "",
         city: data.cidade || "",
         neighborhood: data.bairro || "",
         invite_token: inviteToken
@@ -147,7 +147,7 @@ const Invites = () => {
 
       await inviteService.acceptInvite(formattedData);
       toast.success("✅ Cadastro concluído com sucesso!");
-      
+
       // Aguarda um pouco para o usuário ver a mensagem de sucesso
       setTimeout(() => {
         navigate("/login");
@@ -173,7 +173,7 @@ const Invites = () => {
     <div className="flex flex-col md:flex-row min-h-screen bg-gray-50 dark:bg-gray-900 transition-all">
       <ToastContainer position="top-right" autoClose={4000} />
       {/* Banner */}
-      <div 
+      <div
         className="relative w-full md:w-1/2 flex items-center justify-center p-8 md:rounded-r-3xl overflow-hidden"
         style={{
           background: campaign ? `linear-gradient(to bottom right, ${campaign.campaign.color_primary}, ${campaign.campaign.color_primary}99)` : 'linear-gradient(to bottom right, #2563eb, #4f46e5)'
@@ -220,9 +220,8 @@ const Invites = () => {
           {[1, 2, 3].map((s) => (
             <div
               key={s}
-              className={`h-2 w-14 mx-1 rounded-full transition-all ${
-                s <= step ? "" : "bg-gray-300 dark:bg-gray-700"
-              }`}
+              className={`h-2 w-14 mx-1 rounded-full transition-all ${s <= step ? "" : "bg-gray-300 dark:bg-gray-700"
+                }`}
               style={s <= step ? {
                 backgroundColor: campaign?.campaign.color_primary || '#2563eb'
               } : {}}
@@ -277,9 +276,9 @@ const Invites = () => {
                   className="w-full p-4 text-lg border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                 >
                   <option value="">Selecione o sexo</option>
-                  <option value="Masculino">Masculino</option>
-                  <option value="Feminino">Feminino</option>
-                  <option value="Outro">Outro</option>
+                  <option value="M">Masculino</option>
+                  <option value="F">Feminino</option>
+                  <option value="NI">Outro</option>
                 </select>
                 {errors.sexo && (
                   <p className="text-red-500 text-sm">{errors.sexo.message}</p>
@@ -415,7 +414,7 @@ const InputLarge = ({ icon, error, campaign, ...props }: any) => (
   <div>
     <div className="flex items-center gap-3 border rounded-lg p-4 text-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white">
       <span style={{ color: campaign?.campaign?.color_primary || '#2563eb' }}>{icon}</span>
-      <input {...props} className="w-full bg-transparent outline-none focus:outline-none" 
+      <input {...props} className="w-full bg-transparent outline-none focus:outline-none"
         style={{
           caretColor: campaign?.campaign?.color_primary || '#2563eb'
         }}
