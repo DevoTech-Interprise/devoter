@@ -1,15 +1,14 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import PrivateRoute from "./routes/PrivateRoutes";
 import { ThemeProvider } from "./context/ThemeContext";
+import { UserProvider } from "./context/UserContext";
 import { sessionService } from "./services/sessionService";
-
 
 import Login from "./pages/login/login";
 import Dashboard from "./pages/dashboard/dashboard";
 import InvitePage from "./pages/invite/invite";
 import Invites from "./pages/invites/invites";
 import CampaignsPage from "./pages/campaign/campaign";
-
 
 const RootRedirect = () => {
   const token = localStorage.getItem("token");
@@ -27,52 +26,52 @@ const RootRedirect = () => {
 function App() {
   return (
     <ThemeProvider>
-      <Router >
+      <UserProvider>
+        <Router>
+          <Routes>
+            {/* Páginas públicas */}
+            <Route path="/" element={<RootRedirect />} />
+            <Route path="/login" element={<Login />} />
 
-        <Routes >
-          {/* Páginas públicas */}
-          <Route path="/" element={<RootRedirect />} />
-          <Route path="/login" element={<Login />} />
-          {/* Nota: /auth/logout é rota da API; logout do cliente é feito chamando a API diretamente */}
+            {/* Páginas privadas */}
+            <Route
+              path="/dashboard"
+              element={
+                <PrivateRoute>
+                  <Dashboard />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/invite/:token"
+              element={<InvitePage />}
+            />
+            <Route
+              path="/invite"
+              element={<InvitePage />}
+            />
+            <Route
+              path="/convites"
+              element={
+                <PrivateRoute>
+                  <Invites />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/campanhas"
+              element={
+                <PrivateRoute>
+                  <CampaignsPage />
+                </PrivateRoute>
+              }
+            />
 
-          {/* Páginas privadas */}
-          <Route
-            path="/dashboard"
-            element={
-              <PrivateRoute>
-                <Dashboard />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/invite/:token"
-            element={<InvitePage />}
-          />
-          <Route
-            path="/invite"
-            element={<InvitePage />}
-          />
-          <Route
-            path="/convites"
-            element={
-              <PrivateRoute>
-                <Invites />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/campanhas"
-            element={
-              <PrivateRoute>
-                <CampaignsPage />
-              </PrivateRoute>
-            }
-          />
-
-          {/* ⚠️ Rota curinga (fallback) */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Router>
+            {/* ⚠️ Rota curinga (fallback) */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Router>
+      </UserProvider>
     </ThemeProvider>
   );
 }

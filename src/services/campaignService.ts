@@ -3,10 +3,10 @@ import api from './api';
 export interface CampaignPayload {
   name: string;
   description: string;
-  logo?: File | string; // pode ser File ou string
+  logo?: File | string; 
   color_primary: string;
   color_secondary: string;
-  created_by?: number;
+  created_by?: string;
 }
 
 export const campaignService = {
@@ -54,9 +54,14 @@ export const campaignService = {
       formData.append('logo_url', data.logo);
     }
 
-    const response = await api.put(`api/campaigns/${id}`, formData, {
+    const response = await api.post(`api/campaigns/update/${id}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return response.data;
   },
+
+  async delete(id: string | number) {
+    const response = await api.delete(`api/campaigns/${id}`);
+    return response.data;
+  }
 };

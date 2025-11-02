@@ -1,25 +1,25 @@
 import { useState, useEffect } from "react";
 import { Share, Copy, CheckCheck, Loader2 } from "lucide-react";
 import { useTheme } from "../../context/ThemeContext";
+import { useUser } from "../../context/UserContext";
 import { inviteService } from "../../services/inviteService";
 import { campaignService } from "../../services/campaignService";
 import { toast, ToastContainer } from "react-toastify";
 import Sidebar from "../../components/Sidebar";
-import QRCode from "react-qr-code"; // 🚀 Import QR Code
+import QRCode from "react-qr-code";
 import "react-toastify/dist/ReactToastify.css";
 
 const Invites = () => {
   const { darkMode } = useTheme();
+  const { user, refreshUser } = useUser();
   const [loading, setLoading] = useState(false);
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [copiedMap, setCopiedMap] = useState<{ [key: string]: boolean }>({});
 
-  // Busca campanha do usuário e gera convite inicial
   const fetchCampaigns = async () => {
     try {
       setLoading(true);
-      const user = JSON.parse(localStorage.getItem("user") || "{}");
-      const userId = user?.id ?? user?.ID;
+      const userId = user?.id;
       const campaignId = user?.campaign_id;
 
       if (!userId) {
@@ -27,19 +27,18 @@ const Invites = () => {
         return;
       }
 
-      // 🔹 Busca todas as campanhas
+      // Busca todas as campanhas
       const allCampaigns = await campaignService.getAll();
 
-      // 🔹 Filtra apenas a campanha vinculada ao usuário
+      // Filtra apenas a campanha ativa do usuário
       const myCampaign = allCampaigns.find((c: any) => c.id === campaignId);
 
       if (!myCampaign) {
-        toast.error("Nenhuma campanha vinculada encontrada");
         setCampaigns([]);
         return;
       }
 
-      // 🔹 Gera o convite
+      // Gera o convite
       try {
         const resp = await inviteService.generateInvite(userId);
         setCampaigns([{ ...myCampaign, inviteToken: resp.invite_token, inviter: user }]);
@@ -55,17 +54,31 @@ const Invites = () => {
     }
   };
 
-
   useEffect(() => {
-    fetchCampaigns();
+    if (user) {
+      fetchCampaigns();
+    }
+  }, [user?.campaign_id, user]);
+
+  // Escutar mudanças de campanha
+  useEffect(() => {
+    const handleCampaignChange = async () => {
+      await refreshUser();
+      await fetchCampaigns();
+    };
+
+    window.addEventListener('campaignChanged', handleCampaignChange as EventListener);
+    
+    return () => {
+      window.removeEventListener('campaignChanged', handleCampaignChange as EventListener);
+    };
   }, []);
 
   // Regenera convite
   const handleGenerateInvite = async (campaignId: string) => {
     try {
       setLoading(true);
-      const user = JSON.parse(localStorage.getItem("user") || "{}");
-      const userId = user?.id ?? user?.ID ?? undefined;
+      const userId = user?.id;
       if (!userId) {
         toast.error("Usuário não encontrado");
         return;
@@ -208,7 +221,7 @@ const Invites = () => {
               ) : (
                 <div className="p-6 text-center bg-white dark:bg-gray-800 rounded-xl shadow-lg">
                   <p className="text-gray-600 dark:text-gray-400">Você ainda não criou nenhuma campanha.</p>
-                  <button onClick={() => window.location.href = '/campaign'} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Criar Campanha</button>
+                  <button onClick={() => window.location.href = '/campanhas'} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Criar Campanha</button>
                 </div>
               )}
             </div>

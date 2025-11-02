@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { X, Palette, Loader2, Edit2, Plus } from 'lucide-react';
+import { X, Palette, Loader2, Edit2, Plus, Trash2 } from 'lucide-react';
 import Sidebar from '../../components/Sidebar';
 import { campaignService } from '../../services/campaignService';
 import type { CampaignPayload } from '../../services/campaignService';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { useUser } from '../../context/UserContext';
 
 type Campaign = {
     id: number | string;
@@ -16,32 +17,42 @@ type Campaign = {
     created_by?: number;
 };
 
+type FormData = {
+    name: string;
+    description: string;
+    logo: File | string;
+    color_primary: string;
+    color_secondary: string;
+};
+
 const CampaignsPage = () => {
+    const { user, updateCampaign, refreshUser } = useUser();
     const [campaigns, setCampaigns] = useState<Campaign[]>([]);
     const [loading, setLoading] = useState(false);
     const [imageValid, setImageValid] = useState(true);
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<Campaign | null>(null);
     const [submitting, setSubmitting] = useState(false);
-    const [form, setForm] = useState<CampaignPayload>({
+    const [deleting, setDeleting] = useState<string | number | null>(null);
+    const [activeCampaignId, setActiveCampaignId] = useState<number | null>(user?.campaign_id || null);
+    const [form, setForm] = useState<FormData>({
         name: '',
         description: '',
         logo: '',
-        color_primary: '#000000',
-        color_secondary: '#ffffff',
+        color_primary: '#FCAF15',
+        color_secondary: '#0833AF',
     });
+    const [logoPreview, setLogoPreview] = useState<string>('');
 
     const fetchCampaigns = async () => {
         try {
             setLoading(true);
             const data = await campaignService.getAll();
-            // assume API returns array directly or under data.campaigns
             const list = Array.isArray(data) ? data : data.campaigns || [];
-            // filter to campaigns created by current user
-            const user = JSON.parse(localStorage.getItem('user') || '{}');
-            const userId = user?.id ?? user?.ID ?? user?.ID_USER ?? undefined;
+            const userId = user?.id;
             const filtered = userId ? list.filter((c: any) => String(c.created_by) === String(userId)) : list;
             setCampaigns(filtered);
+            setActiveCampaignId(user?.campaign_id || null);
         } catch (err) {
             console.error(err);
             toast.error('Erro ao carregar campanhas');
@@ -52,11 +63,23 @@ const CampaignsPage = () => {
 
     useEffect(() => {
         fetchCampaigns();
-    }, []);
+    }, [user]);
+
+    // Atualizar quando o usuário mudar
+    useEffect(() => {
+        setActiveCampaignId(user?.campaign_id || null);
+    }, [user?.campaign_id]);
 
     const openCreate = () => {
         setEditing(null);
-        setForm({ name: '', description: '', logo: '', color_primary: '#FCAF15', color_secondary: '#0833AF' });
+        setForm({ 
+            name: '', 
+            description: '', 
+            logo: '', 
+            color_primary: '#FCAF15', 
+            color_secondary: '#0833AF' 
+        });
+        setLogoPreview('');
         setFormOpen(true);
     };
 
@@ -65,10 +88,11 @@ const CampaignsPage = () => {
         setForm({
             name: c.name,
             description: c.description,
-            logo: c.logo,
+            logo: c.logo, // URL da imagem existente
             color_primary: c.color_primary || '#FCAF15',
             color_secondary: c.color_secondary || '#0833AF',
         });
+        setLogoPreview(c.logo);
         setFormOpen(true);
     };
 
@@ -77,20 +101,49 @@ const CampaignsPage = () => {
         setForm(prev => ({ ...prev, [name]: value }));
     };
 
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        img.onload = () => {
+            const minWidth = 1000;
+            const minHeight = 400;
+            if (img.width < minWidth || img.height < minHeight) {
+                toast.error(`Imagem inválida! Deve ter no mínimo ${minWidth}x${minHeight}px`);
+                setForm(prev => ({ ...prev, logo: '' }));
+                setLogoPreview('');
+                setImageValid(false);
+            } else {
+                setForm(prev => ({ ...prev, logo: file }));
+                setLogoPreview(URL.createObjectURL(file));
+                setImageValid(true);
+            }
+        };
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
         if (!imageValid) {
-            toast.error("A imagem selecionada não está nas dimensões ou proporções corretas!");
+            toast.error("A imagem selecionada não está nas dimensões corretas!");
             return;
         }
 
         try {
-            setSubmitting(true); // 🔹 ativa loading do botão
-            const user = JSON.parse(localStorage.getItem('user') || '{}');
-            const created_by = user?.id || user?.ID || undefined;
-
-            const payload: CampaignPayload = { ...form, created_by };
+            setSubmitting(true);
+            const userId = user?.id;
+            
+            // Criar payload no formato esperado pelo service
+            const payload: CampaignPayload = {
+                name: form.name,
+                description: form.description,
+                color_primary: form.color_primary,
+                color_secondary: form.color_secondary,
+                created_by: userId?.toString(),
+                logo: form.logo instanceof File ? form.logo : form.logo || undefined
+            };
 
             if (editing) {
                 await campaignService.update(editing.id, payload);
@@ -106,11 +159,69 @@ const CampaignsPage = () => {
             console.error(err);
             toast.error('Erro ao salvar campanha');
         } finally {
-            setSubmitting(false); // 🔹 desativa loading
+            setSubmitting(false);
         }
     };
 
+    const handleSetActive = async (campaignId: number) => {
+        try {
+            await updateCampaign(campaignId);
+            setActiveCampaignId(campaignId);
+            toast.success('Campanha ativada com sucesso');
+            
+            // Forçar atualização dos dados do usuário
+            await refreshUser();
+        } catch (err) {
+            console.error(err);
+            toast.error('Erro ao ativar campanha');
+        }
+    };
 
+    const handleDelete = async (campaignId: string | number) => {
+        if (!confirm('Tem certeza que deseja excluir esta campanha? Esta ação não pode ser desfeita.')) {
+            return;
+        }
+
+        try {
+            setDeleting(campaignId);
+            await campaignService.delete(campaignId);
+            toast.success('Campanha excluída com sucesso');
+            
+            // Se a campanha excluída era a ativa, limpar a campanha ativa
+            if (activeCampaignId === campaignId) {
+                await updateCampaign(0); // ou null, dependendo da sua API
+                setActiveCampaignId(null);
+                await refreshUser();
+            }
+            
+            fetchCampaigns();
+        } catch (err) {
+            console.error(err);
+            toast.error('Erro ao excluir campanha');
+        } finally {
+            setDeleting(null);
+        }
+    };
+
+    // Escutar mudanças de campanha de outros componentes
+    useEffect(() => {
+        const handleCampaignChange = (event: CustomEvent) => {
+            setActiveCampaignId(event.detail.campaignId);
+        };
+
+        window.addEventListener('campaignChanged', handleCampaignChange as EventListener);
+        
+        return () => {
+            window.removeEventListener('campaignChanged', handleCampaignChange as EventListener);
+        };
+    }, []);
+
+    // Limpar preview quando modal fechar
+    useEffect(() => {
+        if (!formOpen && logoPreview.startsWith('blob:')) {
+            URL.revokeObjectURL(logoPreview);
+        }
+    }, [formOpen, logoPreview]);
 
     return (
         <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
@@ -135,7 +246,6 @@ const CampaignsPage = () => {
                         </button>
                     </header>
 
-
                     <section>
                         {loading ? (
                             <div className="flex items-center justify-center py-12">
@@ -149,15 +259,29 @@ const CampaignsPage = () => {
                                         key={c.id}
                                         className="group rounded-xl shadow-lg bg-white dark:bg-gray-800 pt-14 pb-6 px-6 transition hover:shadow-xl hover:-translate-y-1 border border-gray-100 dark:border-gray-700 relative"
                                     >
-                                        <button
-                                            onClick={() => openEdit(c)}
-                                            className="absolute top-3 right-4 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-white font-semibold shadow transition z-10"
-                                            title="Editar campanha"
-                                        >
-                                            <Edit2 className="w-4 h-4" /> Editar
-                                        </button>
+                                        <div className="absolute top-3 right-4 flex gap-2 z-10">
+                                            <button
+                                                onClick={() => openEdit(c)}
+                                                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-white font-semibold shadow transition"
+                                                title="Editar campanha"
+                                            >
+                                                <Edit2 className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => handleDelete(c.id)}
+                                                disabled={deleting === c.id}
+                                                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold shadow transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                                title="Excluir campanha"
+                                            >
+                                                {deleting === c.id ? (
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                ) : (
+                                                    <Trash2 className="w-4 h-4" />
+                                                )}
+                                            </button>
+                                        </div>
                                         <div className="flex flex-col sm:flex-row gap-6 h-full items-stretch">
-                                            <div className="relative flex-shrink-0 w-full sm:w-[140px] h-40 sm:h-full">
+                                            <div className="relative shrink-0 w-full sm:w-[140px] h-40 sm:h-full">
                                                 <img
                                                     src={c.logo}
                                                     alt={c.name}
@@ -169,12 +293,12 @@ const CampaignsPage = () => {
                                             </div>
                                             <div className="flex-1 flex flex-col min-w-0 h-full">
                                                 <h3
-                                                    className="text-xl font-bold text-gray-900 dark:text-white mb-2 break-words truncate"
+                                                    className="text-xl font-bold text-gray-900 dark:text-white mb-2 wrap-break-word truncate"
                                                     title={c.name}
                                                 >
                                                     {c.name}
                                                 </h3>
-                                                <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3 mb-4 flex-grow overflow-hidden">
+                                                <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3 mb-4 grow overflow-hidden">
                                                     {c.description}
                                                 </p>
                                                 <div className="flex gap-3 items-center flex-wrap">
@@ -186,16 +310,24 @@ const CampaignsPage = () => {
                                                         Cores da campanha
                                                     </span>
                                                 </div>
+                                                <button
+                                                    onClick={() => handleSetActive(Number(c.id))}
+                                                    className={`mt-3 px-4 py-2 rounded-lg font-semibold shadow transition ${activeCampaignId === c.id
+                                                        ? 'bg-green-600 hover:bg-green-700 text-white'
+                                                        : 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200'
+                                                        }`}
+                                                >
+                                                    {activeCampaignId === c.id ? 'Ativo' : 'Ativar'}
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
-
                                 ))}
                             </div>
                         )}
                     </section>
 
-                    {/* Modal de criação/edição profissional */}
+                    {/* Modal criação/edição */}
                     {formOpen && (
                         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-fadeIn">
                             <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-xl p-8 relative border border-gray-200 dark:border-gray-700">
@@ -230,57 +362,23 @@ const CampaignsPage = () => {
                                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                                                 Logo (Imagem)
                                             </label>
-                                            <div className="flex gap-2 items-center">
-                                                <input
-                                                    type="file"
-                                                    accept="image/*"
-                                                    onChange={(e) => {
-                                                        const file = e.target.files?.[0];
-                                                        if (!file) return;
-
-                                                        const img = new Image();
-                                                        img.src = URL.createObjectURL(file);
-
-                                                        img.onload = () => {
-                                                            const minWidth = 1000;  // largura mínima
-                                                            const minHeight = 400;  // altura mínima
-                                                            // const ratio = 3 / 1;    // proporção desejada (3:1)
-
-                                                            // const actualRatio = img.width / img.height;
-
-                                                            if (
-                                                                img.width < minWidth ||
-                                                                img.height < minHeight
-                                                                // Math.abs(actualRatio - ratio) > 0.01 // tolerância de proporção
-                                                            ) {
-                                                                toast.error(
-                                                                    `Imagem inválida! Deve ter no mínimo ${minWidth}x${minHeight}px e proporção 3:1`
-                                                                );
-                                                                setForm(prev => ({ ...prev, logo: '' }));
-                                                                setImageValid(false);
-                                                            } else {
-                                                                setForm(prev => ({ ...prev, logo: file }));
-                                                                setImageValid(true);
-                                                            }
-                                                        };
-                                                    }}
-                                                    className="w-full text-sm text-gray-700 dark:text-gray-200"
-                                                    required={!editing}
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                onChange={handleFileChange}
+                                                className="w-full text-sm text-gray-700 dark:text-gray-200"
+                                                required={!editing}
+                                            />
+                                            {(logoPreview || (editing && typeof form.logo === 'string')) && (
+                                                <img
+                                                    src={logoPreview || (typeof form.logo === 'string' ? form.logo : '')}
+                                                    alt="Preview"
+                                                    className="w-12 h-12 object-cover rounded border border-gray-200 dark:border-gray-700 shadow mt-2"
                                                 />
-
-
-
-                                                {form.logo && (
-                                                    <img
-                                                        src={form.logo instanceof File ? URL.createObjectURL(form.logo) : form.logo}
-                                                        alt="Preview"
-                                                        className="w-12 h-12 object-cover rounded border border-gray-200 dark:border-gray-700 shadow"
-                                                    />
-                                                )}
-                                            </div>
+                                            )}
                                         </div>
-
                                     </div>
+
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Descrição</label>
                                         <textarea
@@ -293,45 +391,34 @@ const CampaignsPage = () => {
                                             required
                                         />
                                     </div>
-                                    <div className="space-y-4">
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Cores da campanha</label>
-                                            <div className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                                                <div className="space-y-2">
-                                                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Primária</label>
-                                                    <input
-                                                        name="color_primary"
-                                                        type="color"
-                                                        value={form.color_primary}
-                                                        onChange={handleChange}
-                                                        className="w-16 h-16 rounded-lg border border-gray-300 dark:border-gray-700 cursor-pointer"
-                                                    />
-                                                    <div className="text-xs font-medium text-gray-600 dark:text-gray-400 text-center mt-1">
-                                                        {form.color_primary.toUpperCase()}
-                                                    </div>
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Secundária</label>
-                                                    <input
-                                                        name="color_secondary"
-                                                        type="color"
-                                                        value={form.color_secondary}
-                                                        onChange={handleChange}
-                                                        className="w-16 h-16 rounded-lg border border-gray-300 dark:border-gray-700 cursor-pointer"
-                                                    />
-                                                    <div className="text-xs font-medium text-gray-600 dark:text-gray-400 text-center mt-1">
-                                                        {form.color_secondary.toUpperCase()}
-                                                    </div>
-                                                </div>
-                                                <div className="flex-1 flex items-center justify-center">
-                                                    <div className="rounded-lg border border-gray-200 dark:border-gray-700 flex items-center overflow-hidden">
-                                                        <div className="w-20 h-20" style={{ backgroundColor: form.color_primary }} />
-                                                        <div className="w-20 h-20" style={{ backgroundColor: form.color_secondary }} />
-                                                    </div>
-                                                </div>
-                                            </div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                                                Cor Primária
+                                            </label>
+                                            <input
+                                                type="color"
+                                                name="color_primary"
+                                                value={form.color_primary}
+                                                onChange={handleChange}
+                                                className="w-full h-12 rounded-lg border border-gray-300 dark:border-gray-700 cursor-pointer"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                                                Cor Secundária
+                                            </label>
+                                            <input
+                                                type="color"
+                                                name="color_secondary"
+                                                value={form.color_secondary}
+                                                onChange={handleChange}
+                                                className="w-full h-12 rounded-lg border border-gray-300 dark:border-gray-700 cursor-pointer"
+                                            />
                                         </div>
                                     </div>
+
                                     <div className="flex justify-end gap-3 mt-6">
                                         <button
                                             type="button"
@@ -344,8 +431,8 @@ const CampaignsPage = () => {
                                             type="submit"
                                             disabled={submitting}
                                             className={`px-6 py-2 rounded-lg font-bold shadow transition flex items-center justify-center gap-2 ${submitting
-                                                    ? 'bg-blue-400 cursor-not-allowed'
-                                                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                                                ? 'bg-blue-400 cursor-not-allowed'
+                                                : 'bg-blue-600 hover:bg-blue-700 text-white'
                                                 }`}
                                         >
                                             {submitting ? (
@@ -357,7 +444,6 @@ const CampaignsPage = () => {
                                                 'Salvar'
                                             )}
                                         </button>
-
                                     </div>
                                 </form>
                             </div>
