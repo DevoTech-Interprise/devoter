@@ -22,6 +22,7 @@ const CampaignsPage = () => {
     const [imageValid, setImageValid] = useState(true);
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<Campaign | null>(null);
+    const [submitting, setSubmitting] = useState(false);
     const [form, setForm] = useState<CampaignPayload>({
         name: '',
         description: '',
@@ -85,6 +86,7 @@ const CampaignsPage = () => {
         }
 
         try {
+            setSubmitting(true); // 🔹 ativa loading do botão
             const user = JSON.parse(localStorage.getItem('user') || '{}');
             const created_by = user?.id || user?.ID || undefined;
 
@@ -103,8 +105,11 @@ const CampaignsPage = () => {
         } catch (err) {
             console.error(err);
             toast.error('Erro ao salvar campanha');
+        } finally {
+            setSubmitting(false); // 🔹 desativa loading
         }
     };
+
 
 
     return (
@@ -237,16 +242,16 @@ const CampaignsPage = () => {
                                                         img.src = URL.createObjectURL(file);
 
                                                         img.onload = () => {
-                                                            const minWidth = 1200;  // largura mínima
+                                                            const minWidth = 1000;  // largura mínima
                                                             const minHeight = 400;  // altura mínima
-                                                            const ratio = 3 / 1;    // proporção desejada (3:1)
+                                                            // const ratio = 3 / 1;    // proporção desejada (3:1)
 
-                                                            const actualRatio = img.width / img.height;
+                                                            // const actualRatio = img.width / img.height;
 
                                                             if (
                                                                 img.width < minWidth ||
-                                                                img.height < minHeight ||
-                                                                Math.abs(actualRatio - ratio) > 0.01 // tolerância de proporção
+                                                                img.height < minHeight
+                                                                // Math.abs(actualRatio - ratio) > 0.01 // tolerância de proporção
                                                             ) {
                                                                 toast.error(
                                                                     `Imagem inválida! Deve ter no mínimo ${minWidth}x${minHeight}px e proporção 3:1`
@@ -337,10 +342,22 @@ const CampaignsPage = () => {
                                         </button>
                                         <button
                                             type="submit"
-                                            className="px-6 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold shadow transition"
+                                            disabled={submitting}
+                                            className={`px-6 py-2 rounded-lg font-bold shadow transition flex items-center justify-center gap-2 ${submitting
+                                                    ? 'bg-blue-400 cursor-not-allowed'
+                                                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                                                }`}
                                         >
-                                            Salvar
+                                            {submitting ? (
+                                                <>
+                                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                                    Salvando...
+                                                </>
+                                            ) : (
+                                                'Salvar'
+                                            )}
                                         </button>
+
                                     </div>
                                 </form>
                             </div>

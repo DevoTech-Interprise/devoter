@@ -20,19 +20,26 @@ const Invites = () => {
       setLoading(true);
       const user = JSON.parse(localStorage.getItem("user") || "{}");
       const userId = user?.id ?? user?.ID;
+      const campaignId = user?.campaign_id;
 
       if (!userId) {
         toast.error("Usuário não encontrado");
         return;
       }
 
-      const myCampaign = await campaignService.getById(userId);
+      // 🔹 Busca todas as campanhas
+      const allCampaigns = await campaignService.getAll();
+
+      // 🔹 Filtra apenas a campanha vinculada ao usuário
+      const myCampaign = allCampaigns.find((c: any) => c.id === campaignId);
+
       if (!myCampaign) {
         toast.error("Nenhuma campanha vinculada encontrada");
         setCampaigns([]);
         return;
       }
 
+      // 🔹 Gera o convite
       try {
         const resp = await inviteService.generateInvite(userId);
         setCampaigns([{ ...myCampaign, inviteToken: resp.invite_token, inviter: user }]);
@@ -47,6 +54,7 @@ const Invites = () => {
       setLoading(false);
     }
   };
+
 
   useEffect(() => {
     fetchCampaigns();
@@ -96,7 +104,7 @@ const Invites = () => {
 
   if (loading) {
     return (
-      <div className="flex h-screen">
+      <div className="flex bg-white dark:bg-gray-900  h-screen">
         <Sidebar />
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
@@ -146,7 +154,7 @@ const Invites = () => {
                     {/* Corpo do Card */}
                     <div className="p-6 space-y-4">
                       {/* Input do link */}
-                      {/* <div>
+                      <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Link do Convite</label>
                         <div className="flex gap-2">
                           <input
@@ -163,12 +171,12 @@ const Invites = () => {
                             {copiedMap[campaign.id] ? <CheckCheck className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5 text-gray-600 dark:text-gray-400" />}
                           </button>
                         </div>
-                      </div> */}
+                      </div>
 
                       {/* QR Code */}
                       {campaign.inviteToken && (
                         <div className="flex flex-col justify-center items-center mt-4">
-                          <label className="block text-xl font-medium text-gray-700 dark:text-gray-300 mb-2">Escaneie o QRCode para o seu link de convite</label>
+                          <label className="block text-center text-xl font-medium text-gray-700 dark:text-gray-300 mb-2">Escaneie o QRCode para o seu link de convite ou compartilhe pelo whatsapp</label>
                           <QRCode
                             value={campaign.inviteToken}
                             size={250}

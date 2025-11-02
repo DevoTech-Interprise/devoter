@@ -142,21 +142,50 @@ const Invites = () => {
         state: data.estado || "",
         city: data.cidade || "",
         neighborhood: data.bairro || "",
-        invite_token: inviteToken
+        invite_token: inviteToken,
       };
 
       await inviteService.acceptInvite(formattedData);
-      toast.success("✅ Cadastro concluído com sucesso!");
 
-      // Aguarda um pouco para o usuário ver a mensagem de sucesso
-      setTimeout(() => {
-        navigate("/login");
-      }, 2000);
-    } catch (error) {
-      console.error(error);
-      toast.error("Erro ao finalizar cadastro. Verifique os dados e tente novamente.");
+      toast.success("✅ Cadastro concluído com sucesso!");
+      setTimeout(() => navigate("/login"), 2000);
+    } catch (error: any) {
+      console.error("Erro ao finalizar cadastro:", error);
+
+      const messages = error?.response?.data?.messages;
+      let errorMessage = "Erro ao finalizar cadastro. Verifique os dados.";
+
+      if (messages && typeof messages === "object") {
+        const firstKey = Object.keys(messages)[0];
+        const originalMessage = messages[firstKey];
+
+        // 🗣️ Tradução automática das mensagens mais comuns
+        const translations: Record<string, string> = {
+          "The phone field must contain a unique value.": "O número de telefone já está cadastrado.",
+          "The email field must contain a unique value.": "O e-mail informado já está cadastrado.",
+          "The password field is required.": "A senha é obrigatória.",
+          "The name field is required.": "O nome é obrigatório.",
+          "The invite token is invalid.": "O link de convite é inválido ou expirou.",
+        };
+
+        errorMessage = translations[originalMessage] || originalMessage;
+      } else if (error?.response?.data?.message) {
+        const originalMessage = error.response.data.message;
+
+        const translations: Record<string, string> = {
+          "Invalid invite token": "Convite inválido ou expirado.",
+          "User already registered": "Usuário já cadastrado.",
+        };
+
+        errorMessage = translations[originalMessage] || originalMessage;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+
+      toast.error(errorMessage);
     }
   };
+
 
   if (loading) {
     return (

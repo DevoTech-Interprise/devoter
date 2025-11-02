@@ -48,6 +48,7 @@ const Login: React.FC = () => {
         email: response.user.email,
         id: response.user.id,
         role: response.user.role,
+        campaign_id: response.user.campaign_id,
       };
 
       localStorage.setItem("user", JSON.stringify(userData));

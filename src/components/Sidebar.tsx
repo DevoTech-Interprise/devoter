@@ -97,7 +97,7 @@ const Sidebar = () => {
     { icon: <Home size={20} />, text: "Dashboard", path: "/dashboard", roles: ["admin"] },
     { icon: <Award size={20} />, text: "Campanhas", path: "/campanhas", roles: ["admin"] },
     { icon: <Send size={20} />, text: "Convites", path: "/convites", roles: ["admin", "user"] },
-    { icon: <Users size={20} />, text: "Apoiadores", path: "/apoiadores", roles: ["admin", "user"] },
+    { icon: <Users size={20} />, text: "Minha rede", path: "/minha rede", roles: ["admin", "user"] },
     { icon: <Activity size={20} />, text: "Engajamento", path: "/engajamento", roles: ["admin"] },
   ];
 
