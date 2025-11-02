@@ -203,9 +203,11 @@ const Invites = () => {
       <ToastContainer position="top-right" autoClose={4000} />
       {/* Banner */}
       <div
-        className="relative w-full md:w-1/2 flex items-center justify-center p-8 md:rounded-r-3xl overflow-hidden"
+        className="relative w-full md:w-1/2 flex flex-col items-center justify-center p-6 md:p-10 md:rounded-r-3xl overflow-hidden text-center"
         style={{
-          background: campaign ? `linear-gradient(to bottom right, ${campaign.campaign.color_primary}, ${campaign.campaign.color_primary}99)` : 'linear-gradient(to bottom right, #2563eb, #4f46e5)'
+          background: campaign
+            ? `linear-gradient(to bottom right, ${campaign.campaign.color_primary}, ${campaign.campaign.color_primary}99)`
+            : 'linear-gradient(to bottom right, #2563eb, #4f46e5)'
         }}
       >
         {campaign && (
@@ -215,28 +217,19 @@ const Invites = () => {
             className="absolute inset-0 object-cover opacity-40"
           />
         )}
-        <div className="relative z-10 text-center text-white">
-          {campaign ? (
-            <>
-              <h1 className="text-3xl font-bold mb-1">{campaign.campaign.name}</h1>
-              <p className="text-lg mb-4">{campaign.campaign.description}</p>
-              <div className="bg-white/10 p-4 rounded-lg backdrop-blur-md inline-block">
-                <p>
-                  <strong>Convidado por:</strong> {campaign.inviter.name}
-                </p>
-                {/* <p className="text-yellow-300 mt-1 text-sm">
-                  ⏳ Convite expira em: <strong>{formatTimer()}</strong>
-                </p> */}
-              </div>
-            </>
-          ) : (
-            <div className="text-center">
-              <h1 className="text-3xl font-bold mb-4">Erro ao carregar campanha</h1>
-              <p>Não foi possível carregar as informações da campanha.</p>
-            </div>
-          )}
+        <div className="relative z-10 text-white max-w-md mx-auto">
+          <h1 className="text-3xl md:text-4xl font-bold mb-4">{campaign?.campaign.name}</h1>
+          <p className="text-base md:text-lg mb-6">
+            Cadastre-se para se conectar com outros eleitores, acompanhar a candidatura e ajudar a fortalecer a rede de apoio ao seu candidato.
+          </p>
+          <div className="bg-white/10 p-4 rounded-lg backdrop-blur-md inline-block">
+            <p>
+              <strong>Convidado por:</strong> {campaign?.inviter.name}
+            </p>
+          </div>
         </div>
       </div>
+
 
       {/* Formulário */}
       <div className="flex flex-col w-full md:w-1/2 justify-center px-8 py-10">

@@ -109,7 +109,7 @@ const Invites = () => {
   // Compartilhar no WhatsApp
   const handleShareWhatsApp = (campaign: any) => {
     if (!campaign.inviteToken) return toast.error("Nenhum link disponível. Gere o convite primeiro.");
-    const inviteText = `Olá! ${campaign.inviter?.name || ''} está te convidando para participar da campanha ${campaign.name}. Clique no link para participar!`;
+    const inviteText = `Olá! ${campaign.inviter?.name || ''} está te convidando para participar da campanha politica de ${campaign.name}. Clique no link para participar!`;
     const encodedText = encodeURIComponent(`${inviteText}\n\n${campaign.inviteToken}`);
     const whatsappUrl = `https://wa.me/?text=${encodedText}`;
     window.open(whatsappUrl, "_blank");
