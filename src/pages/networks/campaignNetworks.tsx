@@ -16,6 +16,13 @@ interface Campaign {
     created_by: number;
 }
 
+// Adicione esta interface no campaignNetworks.tsx
+interface CampaignsResponse {
+    campaigns?: Campaign[];
+    // Outras propriedades que podem vir na resposta
+    [key: string]: any;
+}
+
 interface NetworkWithClass extends NetworkUser {
     networkClass: number;
     children: NetworkWithClass[];
@@ -96,15 +103,25 @@ const CampaignNetworksPage = () => {
     };
 
     // Buscar todas as campanhas e suas redes
+    // Buscar todas as campanhas e suas redes
     const fetchCampaignsWithNetworks = async () => {
         try {
             setLoading(true);
 
             // Buscar todas as campanhas
             const campaignsResponse = await campaignService.getAll();
-            const campaigns: Campaign[] = Array.isArray(campaignsResponse)
-                ? campaignsResponse
-                : campaignsResponse.campaigns || [];
+
+            // Garantir que temos um array de campanhas
+            let campaigns: Campaign[] = [];
+
+            if (Array.isArray(campaignsResponse)) {
+                campaigns = campaignsResponse;
+            } else if (campaignsResponse && typeof campaignsResponse === 'object') {
+                // Se for um objeto, tenta acessar a propriedade campaigns
+                campaigns = (campaignsResponse as CampaignsResponse).campaigns || [];
+            }
+
+            console.log('Campanhas carregadas:', campaigns); // Para debug
 
             // Para cada campanha, buscar as redes dos usuários que pertencem a ela
             const campaignsWithNetworksData: CampaignWithNetworks[] = [];
@@ -139,7 +156,7 @@ const CampaignNetworksPage = () => {
                 setExpandedCampaigns(new Set([campaignsWithNetworksData[0].campaign.id]));
             }
         } catch (err) {
-            console.error(err);
+            console.error('Erro ao carregar campanhas:', err);
             toast.error('Erro ao carregar campanhas e redes');
         } finally {
             setLoading(false);
@@ -313,8 +330,8 @@ const CampaignNetworksPage = () => {
 
                     {/* Card do usuário */}
                     <div className={`flex-1 min-w-0 p-4 rounded-lg border-2 transition-all hover:shadow-md ${isTargetClass
-                            ? 'border-2 border-red-500 bg-red-50 dark:bg-red-900/20'
-                            : 'border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-600'
+                        ? 'border-2 border-red-500 bg-red-50 dark:bg-red-900/20'
+                        : 'border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-600'
                         }`}>
                         <div className="flex items-start justify-between">
                             <div className="flex-1 min-w-0">
@@ -570,13 +587,13 @@ const CampaignNetworksPage = () => {
                                                 <div className="flex flex-wrap gap-2">
                                                     {Object.entries(stats.classDistribution).map(([className, count]) => (
                                                         <div key={className} className={`flex items-center gap-2 px-3 py-1 rounded-full border ${Number(className) === filterClass
-                                                                ? 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800 ring-2 ring-red-500'
-                                                                : 'bg-white dark:bg-gray-600 border-gray-200 dark:border-gray-500'
+                                                            ? 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800 ring-2 ring-red-500'
+                                                            : 'bg-white dark:bg-gray-600 border-gray-200 dark:border-gray-500'
                                                             }`}>
                                                             <div className={`w-3 h-3 rounded-full ${getClassColor(Number(className))}`}></div>
                                                             <span className={`text-sm ${Number(className) === filterClass
-                                                                    ? 'text-red-700 dark:text-red-300 font-bold'
-                                                                    : 'text-gray-700 dark:text-gray-300'
+                                                                ? 'text-red-700 dark:text-red-300 font-bold'
+                                                                : 'text-gray-700 dark:text-gray-300'
                                                                 }`}>
                                                                 Classe {className}: <strong>{count}</strong> membros
                                                             </span>
@@ -612,13 +629,13 @@ const CampaignNetworksPage = () => {
                             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                                 {[1, 2, 3, 4, 5].map(className => (
                                     <div key={className} className={`flex items-center gap-2 p-2 rounded-lg ${className === filterClass
-                                            ? 'bg-red-50 dark:bg-red-900/30 border-2 border-red-500'
-                                            : 'bg-gray-50 dark:bg-gray-700'
+                                        ? 'bg-red-50 dark:bg-red-900/30 border-2 border-red-500'
+                                        : 'bg-gray-50 dark:bg-gray-700'
                                         }`}>
                                         <div className={`w-3 h-3 rounded-full ${getClassColor(className)}`}></div>
                                         <span className={`text-sm ${className === filterClass
-                                                ? 'text-red-700 dark:text-red-300 font-bold'
-                                                : 'text-gray-700 dark:text-gray-300'
+                                            ? 'text-red-700 dark:text-red-300 font-bold'
+                                            : 'text-gray-700 dark:text-gray-300'
                                             }`}>
                                             <strong>Classe {className}:</strong> {className === 1 ? 'Criador' : `Nível ${className}`}
                                         </span>

@@ -1,17 +1,13 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import { userService } from '../services/userService';
+import { userService, type User as UserServiceType } from '../services/userService';
 
-type User = {
-  id: string;
-  name: string;
-  campaign_id?: number;
-  [key: string]: any;
-};
+// Use a mesma interface do userService
+type User = UserServiceType;
 
 type UserContextType = {
   user: User | null;
   setUser: (user: User | null) => void;
-  updateCampaign: (campaignId: number) => Promise<void>;
+  updateCampaign: (campaignId: string | null) => Promise<void>; // Alterado para string | null
   refreshUser: () => Promise<void>;
   clearUser: () => void;
 };
@@ -120,7 +116,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const updateCampaign = async (campaignId: number) => {
+  const updateCampaign = async (campaignId: string | null) => { // Alterado para string | null
     if (!user) return;
     try {
       await userService.update(user.id, { campaign_id: campaignId });

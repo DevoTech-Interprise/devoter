@@ -1,5 +1,18 @@
 import api from './api';
 
+// Adicione esta interface
+export interface Campaign {
+  id: number;
+  name: string;
+  description: string;
+  logo: string;
+  color_primary: string;
+  color_secondary: string;
+  created_by: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface CampaignPayload {
   name: string;
   description: string;
@@ -10,17 +23,17 @@ export interface CampaignPayload {
 }
 
 export const campaignService = {
-  async getAll() {
+  async getAll(): Promise<Campaign[]> {
     const response = await api.get('api/campaigns');
     return response.data;
   },
 
-  async getById(id: string | number) {
+  async getById(id: string | number): Promise<Campaign> {
     const response = await api.get(`api/campaigns/${id}`);
     return response.data;
   },
 
-  async create(data: CampaignPayload) {
+  async create(data: CampaignPayload): Promise<Campaign> {
     const formData = new FormData();
     formData.append('name', data.name);
     formData.append('description', data.description);
@@ -40,7 +53,7 @@ export const campaignService = {
     return response.data;
   },
 
-  async update(id: string | number, data: CampaignPayload) {
+  async update(id: string | number, data: CampaignPayload): Promise<Campaign> {
     const formData = new FormData();
     formData.append('name', data.name);
     formData.append('description', data.description);
@@ -60,7 +73,7 @@ export const campaignService = {
     return response.data;
   },
 
-  async delete(id: string | number) {
+  async delete(id: string | number): Promise<void> {
     const response = await api.delete(`api/campaigns/${id}`);
     return response.data;
   }

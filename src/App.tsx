@@ -11,6 +11,7 @@ import Invites from "./pages/invites/invites";
 import CampaignsPage from "./pages/campaign/campaign";
 import NetworkPage from "./pages/network/network";
 import CampaignNetworksPage from "./pages/networks/campaignNetworks";
+import AlcancePage from "./pages/range/range";
 
 const RootRedirect = () => {
   const token = localStorage.getItem("token");
@@ -83,6 +84,15 @@ function App() {
               element={
                 <PrivateRoute>
                   <CampaignNetworksPage />
+                </PrivateRoute>
+              }
+            />
+
+            <Route
+              path="/alcance-campanhas"
+              element={
+                <PrivateRoute>
+                  <AlcancePage />
                 </PrivateRoute>
               }
             />

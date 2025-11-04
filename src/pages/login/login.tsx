@@ -45,12 +45,24 @@ const Login: React.FC = () => {
       if (!response.access_token)
         throw new Error("Token não encontrado na resposta.");
 
+      // Usar todos os dados do usuário da resposta
       const userData = {
         id: response.user.id.toString(),
         name: response.user.name,
         email: response.user.email,
+        phone: response.user.phone || "",
+        gender: response.user.gender || "NI",
+        country: response.user.country || "",
+        state: response.user.state || "",
+        city: response.user.city || "",
+        neighborhood: response.user.neighborhood || "",
         role: response.user.role,
-        campaign_id: response.user.campaign_id,
+        invited_by: response.user.invited_by || null,
+        campaign_id: response.user.campaign_id || null,
+        invite_token: response.user.invite_token || null,
+        is_active: response.user.is_active || "1",
+        created_at: response.user.created_at || new Date().toISOString(),
+        updated_at: response.user.updated_at || new Date().toISOString(),
       };
 
       // Salvar token primeiro
@@ -90,7 +102,6 @@ const Login: React.FC = () => {
   };
 
   // Observar mudanças no tipo de login para validação condicional
-  const emailValue = watch("email");
   const phoneValue = watch("phone");
 
   return (
