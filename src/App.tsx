@@ -9,6 +9,8 @@ import Dashboard from "./pages/dashboard/dashboard";
 import InvitePage from "./pages/invite/invite";
 import Invites from "./pages/invites/invites";
 import CampaignsPage from "./pages/campaign/campaign";
+import NetworkPage from "./pages/network/network";
+import CampaignNetworksPage from "./pages/networks/campaignNetworks";
 
 const RootRedirect = () => {
   const token = localStorage.getItem("token");
@@ -63,6 +65,24 @@ function App() {
               element={
                 <PrivateRoute>
                   <CampaignsPage />
+                </PrivateRoute>
+              }
+            />
+
+            <Route
+              path="/rede"
+              element={
+                <PrivateRoute>
+                  <NetworkPage />
+                </PrivateRoute>
+              }
+            />
+
+            <Route
+              path="/redes-campanhas"
+              element={
+                <PrivateRoute>
+                  <CampaignNetworksPage />
                 </PrivateRoute>
               }
             />

@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { Eye, EyeOff, Lock, User } from "lucide-react";
 import { useTheme } from "../../context/ThemeContext";
+import { useUser } from "../../context/UserContext";
 import { authService } from "../../services/authService";
 import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
@@ -14,6 +15,7 @@ import { sessionService } from "../../services/sessionService";
 const Login: React.FC = () => {
   const navigate = useNavigate();
   const { darkMode, toggleDarkMode, colors } = useTheme();
+  const { setUser } = useUser();
 
   const [showPassword, setShowPassword] = useState(false);
   const [loginType, setLoginType] = useState<"email" | "phone">("email");
@@ -24,6 +26,7 @@ const Login: React.FC = () => {
     formState: { errors, isSubmitting },
     setValue,
     setError,
+    watch,
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
   });
@@ -43,16 +46,18 @@ const Login: React.FC = () => {
         throw new Error("Token não encontrado na resposta.");
 
       const userData = {
-        token: response.access_token,
+        id: response.user.id.toString(),
         name: response.user.name,
         email: response.user.email,
-        id: response.user.id,
         role: response.user.role,
         campaign_id: response.user.campaign_id,
       };
 
-      localStorage.setItem("user", JSON.stringify(userData));
+      // Salvar token primeiro
       localStorage.setItem("token", response.access_token);
+      
+      // Usar o UserContext para setar o usuário (isso vai atualizar o localStorage também)
+      setUser(userData);
 
       // Inicializa a sessão com o tempo de expiração fornecido pela API
       sessionService.updateLastActivity(response.expires_in);
@@ -77,18 +82,27 @@ const Login: React.FC = () => {
       }
 
       setError("root", { type: "manual", message: errorMessage });
+      
+      // Limpar dados em caso de erro
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
     }
   };
 
+  // Observar mudanças no tipo de login para validação condicional
+  const emailValue = watch("email");
+  const phoneValue = watch("phone");
 
   return (
     <div
-      className={`min-h-screen flex items-center justify-center p-4 transition-colors duration-300 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-gray-100 text-gray-900"
-        }`}
+      className={`min-h-screen flex items-center justify-center p-4 transition-colors duration-300 ${
+        darkMode ? "bg-gray-900 text-gray-100" : "bg-gray-100 text-gray-900"
+      }`}
     >
       <div
-        className={`w-full max-w-md rounded-2xl shadow-lg overflow-hidden ${darkMode ? "bg-gray-800" : "bg-white"
-          }`}
+        className={`w-full max-w-md rounded-2xl shadow-lg overflow-hidden ${
+          darkMode ? "bg-gray-800" : "bg-white"
+        }`}
       >
         {/* HEADER */}
         <div
@@ -114,13 +128,13 @@ const Login: React.FC = () => {
               type="button"
               onClick={() => {
                 setLoginType("email");
-                setValue("email", "");
                 setValue("phone", "");
               }}
-              className={`px-3 py-1 rounded-full text-sm font-medium ${loginType === "email"
+              className={`px-3 py-1 rounded-full text-sm font-medium ${
+                loginType === "email"
                   ? "bg-blue-500 text-white"
                   : "bg-gray-200 dark:bg-gray-700 dark:text-gray-300"
-                }`}
+              }`}
             >
               Email
             </button>
@@ -129,12 +143,12 @@ const Login: React.FC = () => {
               onClick={() => {
                 setLoginType("phone");
                 setValue("email", "");
-                setValue("phone", "");
               }}
-              className={`px-3 py-1 rounded-full text-sm font-medium ${loginType === "phone"
+              className={`px-3 py-1 rounded-full text-sm font-medium ${
+                loginType === "phone"
                   ? "bg-blue-500 text-white"
                   : "bg-gray-200 dark:bg-gray-700 dark:text-gray-300"
-                }`}
+              }`}
             >
               Telefone
             </button>
@@ -144,7 +158,7 @@ const Login: React.FC = () => {
           {loginType === "email" ? (
             <div>
               <label
-                htmlFor="login"
+                htmlFor="email"
                 className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-200"
               >
                 Email
@@ -158,10 +172,11 @@ const Login: React.FC = () => {
                   type="email"
                   placeholder="you@example.com"
                   {...register("email")}
-                  className={`w-full pl-10 pr-3 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent ${darkMode
+                  className={`w-full pl-10 pr-3 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent ${
+                    darkMode
                       ? "bg-gray-700 border-gray-600 text-white focus:ring-blue-400"
                       : "bg-white border-gray-300 text-gray-700 focus:ring-primary-500"
-                    }`}
+                  }`}
                 />
               </div>
               {errors.email && (
@@ -173,14 +188,19 @@ const Login: React.FC = () => {
           ) : (
             <div>
               <label
-                htmlFor="login"
+                htmlFor="phone"
                 className="block text-sm font-medium mb-1 text-gray-900 dark:text-gray-200"
               >
                 Telefone
               </label>
               <PhoneInput
                 country={"br"}
+                value={phoneValue}
                 onChange={(value) => setValue("phone", value)}
+                inputProps={{
+                  name: "phone",
+                  required: true,
+                }}
                 inputStyle={{
                   width: "100%",
                   height: "42px",
@@ -188,10 +208,16 @@ const Login: React.FC = () => {
                   backgroundColor: darkMode ? "#374151" : "white",
                   color: darkMode ? "white" : "black",
                   border: darkMode ? "1px solid #4B5563" : "1px solid #D1D5DB",
+                  fontSize: "16px", // Prevenir zoom no iOS
                 }}
                 buttonStyle={{
                   backgroundColor: darkMode ? "#4B5563" : "#F3F4F6",
                   border: darkMode ? "1px solid #4B5563" : "1px solid #D1D5DB",
+                  borderRadius: "0.5rem 0 0 0.5rem",
+                }}
+                dropdownStyle={{
+                  backgroundColor: darkMode ? "#374151" : "white",
+                  color: darkMode ? "white" : "black",
                 }}
               />
               {errors.phone && (
@@ -219,15 +245,16 @@ const Login: React.FC = () => {
                 type={showPassword ? "text" : "password"}
                 placeholder="••••••••"
                 {...register("password")}
-                className={`w-full pl-10 pr-10 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent ${darkMode
+                className={`w-full pl-10 pr-10 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent ${
+                  darkMode
                     ? "bg-gray-700 border-gray-600 text-white focus:ring-blue-400"
                     : "bg-white border-gray-300 text-gray-700 focus:ring-primary-500"
-                  }`}
+                }`}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
               >
                 {showPassword ? (
                   <EyeOff className="w-5 h-5" />
@@ -244,26 +271,45 @@ const Login: React.FC = () => {
           </div>
 
           {errors.root && (
-            <div className="text-sm text-red-500">{errors.root.message}</div>
+            <div className="text-sm text-red-500 text-center bg-red-50 dark:bg-red-900/20 py-2 px-3 rounded-lg border border-red-200 dark:border-red-800">
+              {errors.root.message}
+            </div>
           )}
 
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full rounded-lg px-4 py-2 font-semibold text-white transition disabled:opacity-50"
+            className="w-full rounded-lg px-4 py-2 font-semibold text-white transition disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
             style={{ backgroundColor: colors.primary }}
           >
-            {isSubmitting ? "Carregando..." : "Entrar"}
+            {isSubmitting ? (
+              <div className="flex items-center justify-center">
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                Carregando...
+              </div>
+            ) : (
+              "Entrar"
+            )}
           </button>
 
-          <div className="text-center">
+          {/* Links adicionais */}
+          <div className="text-center space-y-2">
             <button
               type="button"
-              onClick={toggleDarkMode}
-              className="mt-4 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              onClick={() => navigate("/forgot-password")}
+              className="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
             >
-              Alternar para modo {darkMode ? "claro" : "escuro"}
+              Esqueceu sua senha?
             </button>
+            <div>
+              <button
+                type="button"
+                onClick={toggleDarkMode}
+                className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+              >
+                Alternar para modo {darkMode ? "claro" : "escuro"}
+              </button>
+            </div>
           </div>
         </form>
       </div>
