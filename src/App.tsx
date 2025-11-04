@@ -13,6 +13,7 @@ import NetworkPage from "./pages/network/network";
 import CampaignNetworksPage from "./pages/networks/campaignNetworks";
 import AlcancePage from "./pages/range/range";
 import UserManagement from "./pages/user/users";
+import UserProfile from "./pages/profile/UserProfile";
 
 const RootRedirect = () => {
   const token = localStorage.getItem("token");
@@ -106,6 +107,8 @@ function App() {
                 </PrivateRoute>
               }
             />
+
+            <Route path="/perfil" element={<UserProfile />} />
 
             {/* ⚠️ Rota curinga (fallback) */}
             <Route path="*" element={<Navigate to="/" replace />} />

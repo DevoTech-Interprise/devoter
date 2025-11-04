@@ -14,7 +14,7 @@ type Campaign = {
     logo: string;
     color_primary: string;
     color_secondary: string;
-    created_by?: number;
+    created_by?: number | string;
 };
 
 type FormData = {
@@ -34,7 +34,7 @@ const CampaignsPage = () => {
     const [editing, setEditing] = useState<Campaign | null>(null);
     const [submitting, setSubmitting] = useState(false);
     const [deleting, setDeleting] = useState<string | number | null>(null);
-    const [activeCampaignId, setActiveCampaignId] = useState<number | null>(user?.campaign_id || null);
+    const [activeCampaignId, setActiveCampaignId] = useState<string | number | null>(user?.campaign_id || null);
     const [form, setForm] = useState<FormData>({
         name: '',
         description: '',
@@ -48,9 +48,10 @@ const CampaignsPage = () => {
         try {
             setLoading(true);
             const data = await campaignService.getAll();
-            const list = Array.isArray(data) ? data : data.campaigns || [];
+            // Garantir que data é um array
+            const list = Array.isArray(data) ? data : [];
             const userId = user?.id;
-            const filtered = userId ? list.filter((c: any) => String(c.created_by) === String(userId)) : list;
+            const filtered = userId ? list.filter((c: Campaign) => String(c.created_by) === String(userId)) : list;
             setCampaigns(filtered);
             setActiveCampaignId(user?.campaign_id || null);
         } catch (err) {
@@ -163,9 +164,11 @@ const CampaignsPage = () => {
         }
     };
 
-    const handleSetActive = async (campaignId: number) => {
+    const handleSetActive = async (campaignId: string | number) => {
         try {
-            await updateCampaign(campaignId);
+            // Converter para string se necessário, baseado no que sua API espera
+            const campaignIdStr = String(campaignId);
+            await updateCampaign(campaignIdStr);
             setActiveCampaignId(campaignId);
             toast.success('Campanha ativada com sucesso');
             
@@ -189,7 +192,7 @@ const CampaignsPage = () => {
             
             // Se a campanha excluída era a ativa, limpar a campanha ativa
             if (activeCampaignId === campaignId) {
-                await updateCampaign(0); // ou null, dependendo da sua API
+                await updateCampaign(null);
                 setActiveCampaignId(null);
                 await refreshUser();
             }
@@ -311,7 +314,7 @@ const CampaignsPage = () => {
                                                     </span>
                                                 </div>
                                                 <button
-                                                    onClick={() => handleSetActive(Number(c.id))}
+                                                    onClick={() => handleSetActive(c.id)}
                                                     className={`mt-3 px-4 py-2 rounded-lg font-semibold shadow transition ${activeCampaignId === c.id
                                                         ? 'bg-green-600 hover:bg-green-700 text-white'
                                                         : 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200'

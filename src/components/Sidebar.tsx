@@ -12,6 +12,7 @@ import {
   Sun,
   ChevronDown,
   ChevronRight,
+  User,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTheme } from "../context/ThemeContext";
@@ -54,24 +55,24 @@ type SubmenuItem = {
 
 type MenuItemType = MenuItem | SubmenuItem;
 
-const SidebarItem = ({ 
-  icon, 
-  text, 
-  path, 
-  isOpen, 
-  extraClass = "", 
+const SidebarItem = ({
+  icon,
+  text,
+  path,
+  isOpen,
+  extraClass = "",
   onClick,
   isSubmenu = false
 }: SidebarItemProps) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { darkMode } = useTheme();
-  
+
   // Para itens principais, verifica se o path começa com a localização atual
   // Para subitens, verifica exata correspondência
   const isActive = path ? (
-    isSubmenu 
-      ? location.pathname === path 
+    isSubmenu
+      ? location.pathname === path
       : location.pathname.startsWith(path)
   ) : false;
 
@@ -87,10 +88,10 @@ const SidebarItem = ({
     <button
       onClick={handleClick}
       className={`flex items-center gap-3 w-full p-3 rounded-lg transition
-        ${isActive 
-          ? "bg-blue-600 text-white" 
-          : darkMode 
-            ? "hover:bg-gray-800 text-gray-100" 
+        ${isActive
+          ? "bg-blue-600 text-white"
+          : darkMode
+            ? "hover:bg-gray-800 text-gray-100"
             : "hover:bg-blue-50 text-gray-700"
         }
         ${!isOpen ? "justify-center" : ""} 
@@ -114,17 +115,17 @@ type SubmenuProps = {
   onToggle: () => void;
 };
 
-const Submenu = ({ 
-  icon, 
-  text, 
-  items, 
-  isOpen, 
-  isSubmenuOpen, 
-  onToggle 
+const Submenu = ({
+  icon,
+  text,
+  items,
+  isOpen,
+  isSubmenuOpen,
+  onToggle
 }: SubmenuProps) => {
   const location = useLocation();
   const { darkMode } = useTheme();
-  
+
   // Verifica se algum item do submenu está ativo
   const isActive = items.some(item => location.pathname === item.path);
 
@@ -134,10 +135,10 @@ const Submenu = ({
       <button
         onClick={onToggle}
         className={`flex items-center justify-between w-full p-3 rounded-lg transition
-          ${isActive 
-            ? "bg-blue-600 text-white" 
-            : darkMode 
-              ? "hover:bg-gray-800 text-gray-100" 
+          ${isActive
+            ? "bg-blue-600 text-white"
+            : darkMode
+              ? "hover:bg-gray-800 text-gray-100"
               : "hover:bg-blue-50 text-gray-700"
           }
           ${!isOpen ? "justify-center" : ""}`}
@@ -190,12 +191,12 @@ const Sidebar = () => {
   // Função para obter as iniciais do nome do usuário
   const getUserInitials = () => {
     if (!user?.name) return "U"; // Fallback para "U" de Usuário
-    
+
     const names = user.name.split(' ');
     if (names.length === 1) {
       return names[0].charAt(0).toUpperCase();
     }
-    
+
     // Pega a primeira letra do primeiro nome e a primeira letra do último nome
     return (names[0].charAt(0) + names[names.length - 1].charAt(0)).toUpperCase();
   };
@@ -203,7 +204,7 @@ const Sidebar = () => {
   // Função para gerar uma cor baseada no nome do usuário (para consistência)
   const getUserColor = () => {
     if (!user?.name) return '#0D8ABC'; // Cor padrão
-    
+
     const colors = [
       '#0D8ABC', // Azul
       '#10B981', // Verde
@@ -214,13 +215,13 @@ const Sidebar = () => {
       '#06B6D4', // Ciano
       '#84CC16', // Lima
     ];
-    
+
     // Gera um índice baseado no nome para sempre retornar a mesma cor para o mesmo usuário
     let hash = 0;
     for (let i = 0; i < user.name.length; i++) {
       hash = user.name.charCodeAt(i) + ((hash << 5) - hash);
     }
-    
+
     return colors[Math.abs(hash) % colors.length];
   };
 
@@ -241,67 +242,74 @@ const Sidebar = () => {
 
   // Itens do menu com roles permitidas
   const menuItems: MenuItemType[] = [
-    { 
+    {
       type: 'item',
-      icon: <Home size={20} />, 
-      text: "Dashboard", 
-      path: "/dashboard", 
-      roles: ["admin"] 
+      icon: <Home size={20} />,
+      text: "Dashboard",
+      path: "/dashboard",
+      roles: ["admin"]
     },
-    { 
+    {
       type: 'item',
-      icon: <Award size={20} />, 
-      text: "Campanhas", 
-      path: "/campanhas", 
-      roles: ["admin"] 
+      icon: <Award size={20} />,
+      text: "Campanhas",
+      path: "/campanhas",
+      roles: ["admin"]
     },
-    { 
+    {
       type: 'item',
-      icon: <Send size={20} />, 
-      text: "Convites", 
-      path: "/convites", 
-      roles: ["admin", "user"] 
+      icon: <Send size={20} />,
+      text: "Convites",
+      path: "/convites",
+      roles: ["admin", "user"]
     },
-    { 
+    {
       type: 'submenu',
-      icon: <Users size={20} />, 
-      text: "Redes", 
+      icon: <Users size={20} />,
+      text: "Redes",
       roles: ["admin", "user"],
       items: [
-        { 
-          icon: <Users size={16} />, 
-          text: "Minha rede", 
-          path: "/rede" 
+        {
+          icon: <Users size={16} />,
+          text: "Minha rede",
+          path: "/rede"
         },
-        { 
-          icon: <Users size={16} />, 
-          text: "Rede de campanhas", 
+        {
+          icon: <Users size={16} />,
+          text: "Rede de campanhas",
           path: "/redes-campanhas",
           roles: ["admin"]
         },
       ]
     },
-    { 
+    {
       type: 'item',
-      icon: <Activity size={20} />, 
-      text: "Alcançe & Engajamento", 
-      path: "/alcance-campanhas", 
-      roles: ["admin"] 
+      icon: <Activity size={20} />,
+      text: "Alcançe & Engajamento",
+      path: "/alcance-campanhas",
+      roles: ["admin"]
     },
-    { 
+    {
       type: 'item',
-      icon: <Users size={20} />, 
-      text: "Usuarios", 
-      path: "/usuarios", 
-      roles: ["admin"] 
+      icon: <Users size={20} />,
+      text: "Usuarios",
+      path: "/usuarios",
+      roles: ["admin"]
     },
+    {
+      type: 'item',
+      icon: <User size={20} />,
+      text: "Meu Perfil",
+      path: "/perfil",
+      roles: ["admin", "user"]
+    }
   ];
 
   // Filtrar itens baseado na role do usuário do contexto
   const filteredMenuItems = menuItems.filter(item => {
     if (item.type === 'submenu') {
       // Para submenus, filtrar os itens internos também
-      const filteredSubItems = item.items.filter(subItem => 
+      const filteredSubItems = item.items.filter(subItem =>
         !subItem.roles || subItem.roles.includes(user?.role || "user")
       );
       return filteredSubItems.length > 0 && item.roles.includes(user?.role || "user");
@@ -344,12 +352,10 @@ const Sidebar = () => {
           shadow-xl border-r`}
       >
         {/* Cabeçalho */}
-        <div className={`flex items-center justify-between p-5 border-b ${
-          darkMode ? "border-gray-700" : "border-gray-200"
-        }`}>
-          <div className={`flex items-center gap-3 transition-all duration-300 ${
-            isOpen ? "opacity-100" : "opacity-0 w-0"
+        <div className={`flex items-center justify-between p-5 border-b ${darkMode ? "border-gray-700" : "border-gray-200"
           }`}>
+          <div className={`flex items-center gap-3 transition-all duration-300 ${isOpen ? "opacity-100" : "opacity-0 w-0"
+            }`}>
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
               <Award size={18} className="text-white" />
             </div>
@@ -382,7 +388,7 @@ const Sidebar = () => {
                   key={item.text}
                   icon={item.icon}
                   text={item.text}
-                  items={item.items.filter(subItem => 
+                  items={item.items.filter(subItem =>
                     !subItem.roles || subItem.roles.includes(user?.role || "user")
                   )}
                   isOpen={isOpen}
@@ -391,7 +397,7 @@ const Sidebar = () => {
                 />
               );
             }
-            
+
             return (
               <SidebarItem
                 key={item.text}
@@ -406,11 +412,13 @@ const Sidebar = () => {
 
         {/* Informações do usuário (apenas quando sidebar aberta) */}
         {isOpen && user && (
-          <div className={`px-4 py-3 border-t ${
-            darkMode ? "border-gray-700" : "border-gray-200"
-          }`}>
-            <div className="flex items-center gap-3">
-              <div 
+          <div className={`px-4 py-3 border-t ${darkMode ? "border-gray-700" : "border-gray-200"
+            }`}>
+            <div
+              className="flex items-center gap-3 cursor-pointer"
+              onClick={() => navigate('/perfil')} // Adicione esta linha
+            >
+              <div
                 className="w-10 h-10 rounded-full border border-gray-300 dark:border-gray-600 flex items-center justify-center text-white font-medium text-sm"
                 style={{ backgroundColor: getUserColor() }}
                 title={user.name || 'Usuário'}
@@ -430,14 +438,13 @@ const Sidebar = () => {
         )}
 
         {/* Rodapé: Switch de Tema + Sair */}
-        <div className={`border-t ${
-          darkMode ? "border-gray-700" : "border-gray-200"
-        } p-4 space-y-2`}>
+        <div className={`border-t ${darkMode ? "border-gray-700" : "border-gray-200"
+          } p-4 space-y-2`}>
           <button
             onClick={toggleDarkMode}
             className={`flex items-center gap-3 w-full p-3 rounded-lg transition
-              ${darkMode 
-                ? "hover:bg-gray-800 text-gray-100" 
+              ${darkMode
+                ? "hover:bg-gray-800 text-gray-100"
                 : "hover:bg-blue-50 text-gray-700"
               }
               ${!isOpen ? "justify-center" : ""}`}
@@ -458,11 +465,10 @@ const Sidebar = () => {
             icon={<LogOut size={20} />}
             text="Sair"
             isOpen={isOpen}
-            extraClass={`${
-              darkMode 
-                ? "hover:bg-red-900/50 text-red-400" 
-                : "hover:bg-red-50 text-red-600"
-            }`}
+            extraClass={`${darkMode
+              ? "hover:bg-red-900/50 text-red-400"
+              : "hover:bg-red-50 text-red-600"
+              }`}
             onClick={handleLogout}
           />
         </div>

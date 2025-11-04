@@ -1,7 +1,7 @@
 // src/pages/networks/alcance.tsx
 import { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
-import { Layers, Filter, Users, Navigation, MapPin, ZoomIn, Search } from 'lucide-react';
+import { Layers, Filter, Users, Navigation, MapPin, ZoomIn } from 'lucide-react';
 import Sidebar from '../../components/Sidebar';
 import { campaignService, type Campaign } from '../../services/campaignService';
 import { userService, type User } from '../../services/userService';

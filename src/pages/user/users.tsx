@@ -2,11 +2,9 @@ import { useState, useEffect } from 'react';
 import { 
   Users, 
   Search, 
-  Filter, 
   Edit, 
   Trash2, 
   UserPlus,
-  MoreVertical,
   Eye,
   Mail,
   Phone,
