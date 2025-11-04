@@ -187,6 +187,43 @@ const Sidebar = () => {
   const toggleMobile = () => setMobileOpen(!mobileOpen);
   const toggleNetworksSubmenu = () => setNetworksSubmenuOpen(!networksSubmenuOpen);
 
+  // Função para obter as iniciais do nome do usuário
+  const getUserInitials = () => {
+    if (!user?.name) return "U"; // Fallback para "U" de Usuário
+    
+    const names = user.name.split(' ');
+    if (names.length === 1) {
+      return names[0].charAt(0).toUpperCase();
+    }
+    
+    // Pega a primeira letra do primeiro nome e a primeira letra do último nome
+    return (names[0].charAt(0) + names[names.length - 1].charAt(0)).toUpperCase();
+  };
+
+  // Função para gerar uma cor baseada no nome do usuário (para consistência)
+  const getUserColor = () => {
+    if (!user?.name) return '#0D8ABC'; // Cor padrão
+    
+    const colors = [
+      '#0D8ABC', // Azul
+      '#10B981', // Verde
+      '#F59E0B', // Amarelo
+      '#EF4444', // Vermelho
+      '#8B5CF6', // Roxo
+      '#EC4899', // Rosa
+      '#06B6D4', // Ciano
+      '#84CC16', // Lima
+    ];
+    
+    // Gera um índice baseado no nome para sempre retornar a mesma cor para o mesmo usuário
+    let hash = 0;
+    for (let i = 0; i < user.name.length; i++) {
+      hash = user.name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    
+    return colors[Math.abs(hash) % colors.length];
+  };
+
   const handleLogout = async () => {
     try {
       await authService.logout();
@@ -249,6 +286,13 @@ const Sidebar = () => {
       icon: <Activity size={20} />, 
       text: "Alcançe & Engajamento", 
       path: "/alcance-campanhas", 
+      roles: ["admin"] 
+    },
+    { 
+      type: 'item',
+      icon: <Users size={20} />, 
+      text: "Usuarios", 
+      path: "/usuarios", 
       roles: ["admin"] 
     },
   ];
@@ -366,10 +410,12 @@ const Sidebar = () => {
             darkMode ? "border-gray-700" : "border-gray-200"
           }`}>
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
-                <span className="text-sm font-medium text-blue-600 dark:text-blue-300">
-                  {user.name?.charAt(0).toUpperCase() || "U"}
-                </span>
+              <div 
+                className="w-10 h-10 rounded-full border border-gray-300 dark:border-gray-600 flex items-center justify-center text-white font-medium text-sm"
+                style={{ backgroundColor: getUserColor() }}
+                title={user.name || 'Usuário'}
+              >
+                {getUserInitials()}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
