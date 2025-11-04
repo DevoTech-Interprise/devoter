@@ -1,7 +1,7 @@
 // src/pages/networks/alcance.tsx
 import { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
-import { Layers, Filter, Users, Navigation, MapPin, ZoomIn } from 'lucide-react';
+import { Layers, Filter, Users, Navigation, MapPin, ZoomIn, Search } from 'lucide-react';
 import Sidebar from '../../components/Sidebar';
 import { campaignService, type Campaign } from '../../services/campaignService';
 import { userService, type User } from '../../services/userService';
@@ -23,33 +23,86 @@ L.Icon.Default.mergeOptions({
 });
 
 // Interface para coordenadas geográficas
-interface NeighborhoodCoordinates {
-    [neighborhood: string]: [number, number];
+interface LocationCoordinates {
+    coordinates: [number, number];
+    bounds?: [[number, number], [number, number]]; // Área do bairro
+    displayName: string;
 }
 
-// Mapeamento de bairros para coordenadas (expanda conforme necessário)
-const NEIGHBORHOOD_COORDINATES: NeighborhoodCoordinates = {
-    'coqueiro': [-7.8344, -35.7550],
-    'são sebastião': [-7.8333, -35.7667],
-    'vila esperança': [-23.8950, -46.4250],
-    'juca': [-10.8231, -42.7289],
-    'manoel vidal': [-7.8550, -35.5850],
-    // Adicione mais bairros conforme necessário
+// Cache para coordenadas já buscadas
+const coordinatesCache = new Map<string, LocationCoordinates>();
+
+// Função para buscar coordenadas usando Nominatim (OpenStreetMap)
+const geocodeLocation = async (location: string): Promise<LocationCoordinates | null> => {
+    // Verifica no cache primeiro
+    const cacheKey = location.toLowerCase().trim();
+    if (coordinatesCache.has(cacheKey)) {
+        return coordinatesCache.get(cacheKey)!;
+    }
+
+    try {
+        const response = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}&limit=1&countrycodes=br&addressdetails=1`
+        );
+        
+        if (!response.ok) {
+            throw new Error('Erro na requisição de geocoding');
+        }
+
+        const data = await response.json();
+        
+        if (data && data.length > 0) {
+            const result = data[0];
+            const coordinates: LocationCoordinates = {
+                coordinates: [parseFloat(result.lat), parseFloat(result.lon)],
+                displayName: result.display_name
+            };
+
+            // Se for um bairro, tenta obter bounds mais precisos
+            if (result.address?.suburb || result.address?.neighbourhood) {
+                // Para bairros, usa um raio maior
+                coordinates.bounds = [
+                    [parseFloat(result.lat) - 0.01, parseFloat(result.lon) - 0.01],
+                    [parseFloat(result.lat) + 0.01, parseFloat(result.lon) + 0.01]
+                ];
+            }
+
+            // Salva no cache
+            coordinatesCache.set(cacheKey, coordinates);
+            
+            console.log(`Geocoding encontrado para: ${location}`, coordinates);
+            return coordinates;
+        }
+
+        console.log(`Nenhum resultado de geocoding para: ${location}`);
+        return null;
+    } catch (error) {
+        console.error(`Erro no geocoding para ${location}:`, error);
+        return null;
+    }
 };
 
-// Mapeamento de cidades para coordenadas (fallback)
-const CITY_COORDINATES: { [city: string]: [number, number] } = {
-    'surubim': [-7.8344, -35.7550],
-    'cubatão': [-23.8950, -46.4250],
-    'xique-xique': [-10.8231, -42.7289],
-    'joão alfredo': [-7.8550, -35.5850],
+// Função para normalizar nomes de localização
+const normalizeLocationName = (name: string): string => {
+    if (!name) return '';
+    
+    return name
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+        .replace(/\s+/g, ' ') // Remove espaços extras
+        .trim();
 };
 
 // Interface para agrupar usuários por localização
 interface UserGroup {
     coordinates: [number, number];
+    bounds?: [[number, number], [number, number]];
     users: User[];
     locationName: string;
+    normalizedName: string;
+    displayName?: string;
+    type: 'neighborhood' | 'city' | 'unknown';
 }
 
 const AlcancePage = () => {
@@ -57,6 +110,7 @@ const AlcancePage = () => {
     const [selectedCampaign, setSelectedCampaign] = useState<string>('');
     const [networkUsers, setNetworkUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(false);
+    const [geocodingLoading, setGeocodingLoading] = useState(false);
     const [mapCenter, setMapCenter] = useState<[number, number]>([-15.7797, -47.9297]);
     const [mapZoom, setMapZoom] = useState(4);
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -71,8 +125,6 @@ const AlcancePage = () => {
             const campaignsData: Campaign[] = Array.isArray(response)
                 ? response
                 : (response?.campaigns || []);
-
-            console.log('Campanhas carregadas:', campaignsData);
 
             setCampaigns(campaignsData);
 
@@ -92,16 +144,9 @@ const AlcancePage = () => {
             const users = await userService.getNetworkUsersByCampaign(campaignId);
             setNetworkUsers(users);
 
-            // Agrupar usuários por localização
-            const groups = groupUsersByLocation(users);
-            setUserGroups(groups);
+            // Processar geocoding em lote
+            await processUserGeocoding(users);
 
-            if (users.length > 0) {
-                updateMapCenter(users);
-            } else {
-                setMapCenter([-15.7797, -47.9297]);
-                setMapZoom(4);
-            }
         } catch (error) {
             console.error('Erro ao carregar rede:', error);
             toast.error('Erro ao carregar rede de usuários');
@@ -110,22 +155,110 @@ const AlcancePage = () => {
         }
     };
 
+    // Processar geocoding para todos os usuários
+    const processUserGeocoding = async (users: User[]) => {
+        setGeocodingLoading(true);
+        
+        try {
+            // Agrupar usuários por localização primeiro
+            const locationGroups = groupUsersByLocation(users);
+            
+            // Buscar coordenadas para cada localização única
+            const groupsWithCoordinates: UserGroup[] = [];
+            
+            for (const group of locationGroups) {
+                const locationQuery = buildLocationQuery(group);
+                const geocodingResult = await geocodeLocation(locationQuery);
+                
+                if (geocodingResult) {
+                    groupsWithCoordinates.push({
+                        ...group,
+                        coordinates: geocodingResult.coordinates,
+                        bounds: geocodingResult.bounds,
+                        displayName: geocodingResult.displayName
+                    });
+                } else {
+                    // Se não encontrou, usa fallback para cidade
+                    const cityQuery = group.users[0].city;
+                    if (cityQuery) {
+                        const cityGeocoding = await geocodeLocation(cityQuery);
+                        if (cityGeocoding) {
+                            groupsWithCoordinates.push({
+                                ...group,
+                                coordinates: cityGeocoding.coordinates,
+                                bounds: cityGeocoding.bounds,
+                                displayName: cityGeocoding.displayName,
+                                type: 'city'
+                            });
+                        }
+                    }
+                }
+            }
+
+            setUserGroups(groupsWithCoordinates);
+
+            if (groupsWithCoordinates.length > 0) {
+                updateMapCenter(groupsWithCoordinates);
+            } else {
+                setMapCenter([-15.7797, -47.9297]);
+                setMapZoom(4);
+            }
+        } catch (error) {
+            console.error('Erro no processamento de geocoding:', error);
+            toast.error('Erro ao processar localizações');
+        } finally {
+            setGeocodingLoading(false);
+        }
+    };
+
+    // Construir query de localização otimizada
+    const buildLocationQuery = (group: UserGroup): string => {
+        const user = group.users[0];
+        
+        // Prioridade: Bairro + Cidade + Estado
+        if (user.neighborhood && user.city && user.state) {
+            return `${user.neighborhood}, ${user.city}, ${user.state}, Brasil`;
+        }
+        
+        // Fallback: Bairro + Cidade
+        if (user.neighborhood && user.city) {
+            return `${user.neighborhood}, ${user.city}, Brasil`;
+        }
+        
+        // Fallback: Cidade + Estado
+        if (user.city && user.state) {
+            return `${user.city}, ${user.state}, Brasil`;
+        }
+        
+        // Último fallback: Apenas cidade
+        if (user.city) {
+            return `${user.city}, Brasil`;
+        }
+        
+        return group.locationName;
+    };
+
     // Agrupar usuários por localização
     const groupUsersByLocation = (users: User[]): UserGroup[] => {
         const groups: { [key: string]: UserGroup } = {};
 
         users.forEach(user => {
-            const coordinates = getCoordinatesForUser(user);
-            if (!coordinates) return;
+            if (!user.neighborhood && !user.city) return;
 
-            // Criar chave única baseada nas coordenadas
-            const locationKey = `${coordinates[0]},${coordinates[1]}`;
-            
+            // Cria uma chave única baseada na localização
+            const locationKey = normalizeLocationName(
+                user.neighborhood ? `${user.neighborhood}, ${user.city}` : user.city || ''
+            );
+
+            if (!locationKey) return;
+
             if (!groups[locationKey]) {
                 groups[locationKey] = {
-                    coordinates,
+                    coordinates: [0, 0], // Será preenchido pelo geocoding
                     users: [],
-                    locationName: user.neighborhood || user.city || 'Localização desconhecida'
+                    locationName: user.neighborhood ? `${user.neighborhood}, ${user.city}` : user.city || 'Localização desconhecida',
+                    normalizedName: locationKey,
+                    type: user.neighborhood ? 'neighborhood' : 'city'
                 };
             }
             
@@ -136,62 +269,39 @@ const AlcancePage = () => {
     };
 
     // Atualizar centro do mapa baseado na localização dos usuários
-    const updateMapCenter = (users: User[]) => {
-        const usersWithCoordinates = users.filter(user =>
-            getCoordinatesForUser(user)
+    const updateMapCenter = (groups: UserGroup[]) => {
+        const groupsWithCoordinates = groups.filter(group => 
+            group.coordinates[0] !== 0 && group.coordinates[1] !== 0
         );
 
-        if (usersWithCoordinates.length > 0) {
-            const coordinates = usersWithCoordinates.map(user =>
-                getCoordinatesForUser(user)!
-            );
+        if (groupsWithCoordinates.length > 0) {
+            const coordinates = groupsWithCoordinates.map(group => group.coordinates);
 
             const avgLat = coordinates.reduce((sum, coord) => sum + coord[0], 0) / coordinates.length;
             const avgLng = coordinates.reduce((sum, coord) => sum + coord[1], 0) / coordinates.length;
 
             setMapCenter([avgLat, avgLng]);
-            setMapZoom(usersWithCoordinates.length === 1 ? 14 : 12); // Zoom mais próximo
+            setMapZoom(groupsWithCoordinates.length === 1 ? 12 : 10);
         }
-    };
-
-    // Obter coordenadas para um usuário
-    const getCoordinatesForUser = (user: User): [number, number] | null => {
-        if (!user.neighborhood && !user.city) return null;
-
-        // Primeiro tenta pelo bairro
-        if (user.neighborhood) {
-            const neighborhoodKey = user.neighborhood.toLowerCase();
-            if (NEIGHBORHOOD_COORDINATES[neighborhoodKey]) {
-                return NEIGHBORHOOD_COORDINATES[neighborhoodKey];
-            }
-        }
-
-        // Fallback para a cidade
-        if (user.city) {
-            const cityKey = user.city.toLowerCase();
-            if (CITY_COORDINATES[cityKey]) {
-                return CITY_COORDINATES[cityKey];
-            }
-        }
-
-        return null;
     };
 
     // Navegar para um usuário específico no mapa
     const focusOnUser = (user: User) => {
-        const coordinates = getCoordinatesForUser(user);
-        if (!coordinates) {
+        const userGroup = userGroups.find(group => 
+            group.users.some(u => u.id === user.id)
+        );
+
+        if (!userGroup) {
             toast.info('Usuário não possui localização definida');
             return;
         }
 
         setSelectedUser(user);
-        setMapCenter(coordinates);
-        setMapZoom(16); // Zoom bem próximo para focar no usuário
+        setMapCenter(userGroup.coordinates);
+        setMapZoom(14);
 
-        // Se o mapa já foi inicializado, forçar o redesenho
         if (mapRef.current) {
-            mapRef.current.setView(coordinates, 16);
+            mapRef.current.setView(userGroup.coordinates, 14);
         }
     };
 
@@ -199,11 +309,19 @@ const AlcancePage = () => {
     const focusOnGroup = (group: UserGroup) => {
         setSelectedUser(null);
         setMapCenter(group.coordinates);
-        setMapZoom(14); // Zoom para mostrar o grupo
+        setMapZoom(group.type === 'neighborhood' ? 14 : 12);
 
         if (mapRef.current) {
-            mapRef.current.setView(group.coordinates, 14);
+            mapRef.current.setView(group.coordinates, group.type === 'neighborhood' ? 14 : 12);
         }
+    };
+
+    // Calcular raio baseado no tipo de localização
+    const getRadiusForGroup = (group: UserGroup): number => {
+        if (group.type === 'neighborhood') {
+            return 500; // 1km para bairros
+        }
+        return 2000; // 2km para cidades
     };
 
     // Estatísticas da rede
@@ -211,13 +329,13 @@ const AlcancePage = () => {
         const neighborhoods = new Set(
             networkUsers
                 .filter(user => user.neighborhood)
-                .map(user => user.neighborhood.toLowerCase())
+                .map(user => normalizeLocationName(user.neighborhood!))
         );
 
         const cities = new Set(
             networkUsers
                 .filter(user => user.city)
-                .map(user => user.city)
+                .map(user => normalizeLocationName(user.city!))
         );
 
         const states = new Set(
@@ -227,7 +345,7 @@ const AlcancePage = () => {
         );
 
         const usersWithLocation = networkUsers.filter(user =>
-            getCoordinatesForUser(user)
+            user.neighborhood || user.city
         );
 
         return {
@@ -238,7 +356,8 @@ const AlcancePage = () => {
             usersWithLocation: usersWithLocation.length,
             coveragePercentage: networkUsers.length > 0 ?
                 Math.round((usersWithLocation.length / networkUsers.length) * 100) : 0,
-            userGroups: userGroups.length
+            userGroups: userGroups.length,
+            geocodedGroups: userGroups.filter(group => group.coordinates[0] !== 0).length
         };
     };
 
@@ -318,7 +437,7 @@ const AlcancePage = () => {
 
                             {/* Estatísticas */}
                             {selectedCampaign && (
-                                <div className="grid grid-cols-2 md:grid-cols-7 gap-4 mb-6">
+                                <div className="grid grid-cols-2 md:grid-cols-8 gap-4 mb-6">
                                     <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                                         <div className="text-center">
                                             <p className="text-sm text-gray-600 dark:text-gray-400">Total de Membros</p>
@@ -381,17 +500,33 @@ const AlcancePage = () => {
                                             </p>
                                         </div>
                                     </div>
+
+                                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                                        <div className="text-center">
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">Geocodificados</p>
+                                            <p className="text-xl font-bold text-gray-900 dark:text-white">
+                                                {stats.geocodedGroups}
+                                            </p>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                         </header>
 
                         {/* Mapa */}
                         <section className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
-                            {loading ? (
+                            {(loading || geocodingLoading) ? (
                                 <div className="h-96 flex items-center justify-center">
                                     <div className="text-center">
                                         <Layers className="w-12 h-12 animate-pulse text-gray-400 mx-auto mb-4" />
-                                        <p className="text-gray-500 dark:text-gray-400">Carregando mapa...</p>
+                                        <p className="text-gray-500 dark:text-gray-400">
+                                            {geocodingLoading ? 'Buscando localizações...' : 'Carregando mapa...'}
+                                        </p>
+                                        {geocodingLoading && (
+                                            <p className="text-sm text-gray-400 mt-2">
+                                                Processando {userGroups.length} localizações
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                             ) : selectedCampaign ? (
@@ -409,16 +544,16 @@ const AlcancePage = () => {
                                         
                                         {userGroups.map((group, index) => (
                                             <div key={index}>
-                                                {/* Área de influência reduzida (300m de raio) */}
+                                                {/* Área de influência baseada no tipo de localização */}
                                                 <Circle
                                                     center={group.coordinates}
-                                                    radius={300} // Raio reduzido para 300m
+                                                    radius={getRadiusForGroup(group)}
                                                     pathOptions={{
-                                                        fillColor: group.users.length > 1 ? '#f59e0b' : '#10b981',
-                                                        fillOpacity: 0.2,
-                                                        color: group.users.length > 1 ? '#d97706' : '#059669',
+                                                        fillColor: group.type === 'neighborhood' ? '#f59e0b' : '#10b981',
+                                                        fillOpacity: 0.3,
+                                                        color: group.type === 'neighborhood' ? '#d97706' : '#059669',
                                                         weight: 2,
-                                                        opacity: 0.6
+                                                        opacity: 0.8
                                                     }}
                                                 />
                                                 
@@ -429,8 +564,13 @@ const AlcancePage = () => {
                                                             <h3 className="font-semibold text-gray-900 mb-2">
                                                                 {group.locationName}
                                                             </h3>
+                                                            {group.displayName && (
+                                                                <p className="text-xs text-gray-500 mb-2">
+                                                                    {group.displayName}
+                                                                </p>
+                                                            )}
                                                             <p className="text-sm text-gray-600 mb-3">
-                                                                <strong>{group.users.length}</strong> usuário(s) nesta localização
+                                                                <strong>{group.users.length}</strong> usuário(s) nesta {group.type === 'neighborhood' ? 'bairro' : 'cidade'}
                                                             </p>
                                                             <div className="max-h-40 overflow-y-auto">
                                                                 {group.users.map(user => (
@@ -438,16 +578,24 @@ const AlcancePage = () => {
                                                                         <p className="font-medium text-gray-900">{user.name}</p>
                                                                         <p className="text-xs text-gray-500">{user.email}</p>
                                                                         <p className="text-xs text-gray-500">{user.phone}</p>
-                                                                        <span className={`inline-block mt-1 px-2 py-1 text-xs rounded-full ${
-                                                                            user.role === 'admin' 
-                                                                                ? 'bg-yellow-100 text-yellow-800' 
-                                                                                : 'bg-blue-100 text-blue-800'
-                                                                        }`}>
-                                                                            {user.role === 'admin' ? 'Administrador' : 'Usuário'}
-                                                                        </span>
+                                                                        <div className="flex flex-wrap gap-1 mt-1">
+                                                                            <span className={`inline-block px-2 py-1 text-xs rounded-full ${
+                                                                                user.role === 'admin' 
+                                                                                    ? 'bg-yellow-100 text-yellow-800' 
+                                                                                    : 'bg-blue-100 text-blue-800'
+                                                                            }`}>
+                                                                                {user.role === 'admin' ? 'Administrador' : 'Usuário'}
+                                                                            </span>
+                                                                        </div>
                                                                     </div>
                                                                 ))}
                                                             </div>
+                                                            <button
+                                                                onClick={() => focusOnGroup(group)}
+                                                                className="w-full mt-2 px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition-colors"
+                                                            >
+                                                                Focar no {group.type === 'neighborhood' ? 'Bairro' : 'Cidade'}
+                                                            </button>
                                                         </div>
                                                     </Popup>
                                                 </Marker>
@@ -457,8 +605,8 @@ const AlcancePage = () => {
                                         {/* Marcador especial para usuário selecionado */}
                                         {selectedUser && (
                                             <Circle
-                                                center={getCoordinatesForUser(selectedUser)!}
-                                                radius={50} // Pequeno círculo para destacar
+                                                center={userGroups.find(g => g.users.some(u => u.id === selectedUser.id))?.coordinates || mapCenter}
+                                                radius={100}
                                                 pathOptions={{
                                                     fillColor: '#ef4444',
                                                     fillOpacity: 0.3,
@@ -530,10 +678,10 @@ const AlcancePage = () => {
                                         </thead>
                                         <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
                                             {networkUsers.map((user) => {
-                                                const hasLocation = getCoordinatesForUser(user);
                                                 const userGroup = userGroups.find(group => 
                                                     group.users.some(u => u.id === user.id)
                                                 );
+                                                const hasLocation = !!userGroup;
                                                 const usersInSameLocation = userGroup ? userGroup.users.length : 0;
 
                                                 return (
