@@ -296,13 +296,6 @@ const Sidebar = () => {
       path: "/usuarios",
       roles: ["admin"]
     },
-    {
-      type: 'item',
-      icon: <User size={20} />,
-      text: "Meu Perfil",
-      path: "/perfil",
-      roles: ["admin", "user"]
-    }
   ];
 
   // Filtrar itens baseado na role do usuário do contexto
