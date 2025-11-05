@@ -50,13 +50,13 @@ export const userService = {
     return data;
   },
 
-  // 🔹 NOVO: Busca usuários por campanha
+  // 🔹 Busca usuários por campanha
   getUsersByCampaign: async (campaignId: string): Promise<User[]> => {
     const allUsers = await userService.getAll();
     return allUsers.filter(user => user.campaign_id === campaignId);
   },
 
-  // 🔹 NOVO: Busca toda a rede de usuários de uma campanha
+  // 🔹 Busca toda a rede de usuários de uma campanha
   getNetworkUsersByCampaign: async (campaignId: string): Promise<User[]> => {
     const allUsers = await userService.getAll();
     const campaignUsers = allUsers.filter(user => user.campaign_id === campaignId);
@@ -89,7 +89,7 @@ export const userService = {
     return fullNetwork;
   },
 
-  // 🔹 NOVO: Busca usuários por localização (cidade, estado, bairro)
+  // 🔹 Busca usuários por localização (cidade, estado, bairro)
   getUsersByLocation: async (filters: { city?: string; state?: string; neighborhood?: string }): Promise<User[]> => {
     const allUsers = await userService.getAll();
     
@@ -99,5 +99,52 @@ export const userService = {
       if (filters.neighborhood && user.neighborhood !== filters.neighborhood) return false;
       return true;
     });
+  },
+
+  // 🔹 Buscar managers disponíveis (sem campaign_id)
+  getAvailableManagers: async (): Promise<User[]> => {
+    const allUsers = await userService.getAll();
+    return allUsers.filter(user => 
+      user.role === 'manager' && 
+      (!user.campaign_id || user.campaign_id === null || user.campaign_id === '')
+    );
+  },
+
+  // 🔹 Atualizar campaign_id de um manager
+  assignToCampaign: async (userId: string, campaignId: string): Promise<User> => {
+    console.log(`Vinculando usuário ${userId} à campanha ${campaignId}`);
+    
+    const { data } = await api.put(`api/auth/${userId}`, {
+      campaign_id: campaignId
+    });
+    
+    console.log(`Usuário ${userId} vinculado com sucesso`);
+    return data;
+  },
+
+  removeFromCampaign: async (userId: string): Promise<User> => {
+    console.log(`Removendo usuário ${userId} da campanha`);
+    
+    const { data } = await api.put(`api/auth/${userId}`, {
+      campaign_id: null
+    });
+    
+    console.log(`Usuário ${userId} removido com sucesso`);
+    return data;
+  },
+
+
+  // 🔹 Buscar managers por campanha
+  getManagersByCampaign: async (campaignId: string): Promise<User[]> => {
+    const allUsers = await userService.getAll();
+    return allUsers.filter(user => 
+      user.role === 'manager' && user.campaign_id === campaignId
+    );
+  },
+
+  // 🔹 Buscar todos os managers (independente de campanha)
+  getAllManagers: async (): Promise<User[]> => {
+    const allUsers = await userService.getAll();
+    return allUsers.filter(user => user.role === 'manager');
   }
 };

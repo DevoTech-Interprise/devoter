@@ -12,12 +12,15 @@ import {
   Calendar,
   Shield,
   CheckCircle,
-  XCircle
+  XCircle,
+  Key
 } from "lucide-react";
 import Sidebar from "../../components/Sidebar";
 import Header from "../../components/Header";
 import { useTheme } from "../../context/ThemeContext";
 import { userService, type User } from '../../services/userService';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const UserManagement = () => {
   const { darkMode } = useTheme();
@@ -26,12 +29,27 @@ const UserManagement = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
-  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'user'>('all');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'user' | 'manager'>('all');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [editForm, setEditForm] = useState<Partial<User>>({});
+  const [createForm, setCreateForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    password: '',
+    confirmPassword: '',
+    role: 'user',
+    gender: '',
+    country: '',
+    state: '',
+    city: '',
+    neighborhood: '',
+    is_active: '1'
+  });
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
@@ -49,6 +67,7 @@ const UserManagement = () => {
       setUsers(usersData);
     } catch (error) {
       console.error('Erro ao carregar usuários:', error);
+      toast.error('Erro ao carregar usuários');
     } finally {
       setLoading(false);
     }
@@ -108,17 +127,37 @@ const UserManagement = () => {
     setShowDeleteModal(true);
   };
 
+  const handleCreate = () => {
+    setCreateForm({
+      name: '',
+      email: '',
+      phone: '',
+      password: '',
+      confirmPassword: '',
+      role: 'user',
+      gender: '',
+      country: '',
+      state: '',
+      city: '',
+      neighborhood: '',
+      is_active: '1'
+    });
+    setShowCreateModal(true);
+  };
+
   const confirmDelete = async () => {
     if (!selectedUser) return;
 
     try {
       setActionLoading('delete');
       await userService.delete(selectedUser.id);
-      await loadUsers(); // Recarregar a lista
+      await loadUsers();
       setShowDeleteModal(false);
       setSelectedUser(null);
+      toast.success('Usuário excluído com sucesso');
     } catch (error) {
       console.error('Erro ao deletar usuário:', error);
+      toast.error('Erro ao excluir usuário');
     } finally {
       setActionLoading(null);
     }
@@ -130,12 +169,74 @@ const UserManagement = () => {
     try {
       setActionLoading('edit');
       await userService.update(selectedUser.id, editForm);
-      await loadUsers(); // Recarregar a lista
+      await loadUsers();
       setShowEditModal(false);
       setSelectedUser(null);
       setEditForm({});
+      toast.success('Usuário atualizado com sucesso');
     } catch (error) {
       console.error('Erro ao atualizar usuário:', error);
+      toast.error('Erro ao atualizar usuário');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const createUser = async () => {
+    // Validações
+    if (!createForm.name || !createForm.email || !createForm.password) {
+      toast.error('Preencha todos os campos obrigatórios');
+      return;
+    }
+
+    if (createForm.password !== createForm.confirmPassword) {
+      toast.error('As senhas não coincidem');
+      return;
+    }
+
+    if (createForm.password.length < 6) {
+      toast.error('A senha deve ter pelo menos 6 caracteres');
+      return;
+    }
+
+    try {
+      setActionLoading('create');
+      
+      const userData = {
+        name: createForm.name,
+        email: createForm.email,
+        phone: createForm.phone,
+        password: createForm.password,
+        role: createForm.role,
+        gender: createForm.gender || null,
+        country: createForm.country || null,
+        state: createForm.state || null,
+        city: createForm.city || null,
+        neighborhood: createForm.neighborhood || null,
+        is_active: createForm.is_active
+      };
+
+      await userService.create(userData);
+      await loadUsers();
+      setShowCreateModal(false);
+      setCreateForm({
+        name: '',
+        email: '',
+        phone: '',
+        password: '',
+        confirmPassword: '',
+        role: 'user',
+        gender: '',
+        country: '',
+        state: '',
+        city: '',
+        neighborhood: '',
+        is_active: '1'
+      });
+      toast.success('Usuário criado com sucesso');
+    } catch (error) {
+      console.error('Erro ao criar usuário:', error);
+      toast.error('Erro ao criar usuário');
     } finally {
       setActionLoading(null);
     }
@@ -175,24 +276,19 @@ const UserManagement = () => {
   };
 
   const getRoleBadge = (role: string) => {
-    const isAdmin = role === 'admin';
+    const roleConfig = {
+      admin: { color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300', icon: Shield, label: 'Admin' },
+      manager: { color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300', icon: Users, label: 'Manager' },
+      user: { color: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300', icon: Users, label: 'Usuário' }
+    };
+
+    const config = roleConfig[role as keyof typeof roleConfig] || roleConfig.user;
+    const IconComponent = config.icon;
+
     return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-        isAdmin
-          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
-          : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-      }`}>
-        {isAdmin ? (
-          <>
-            <Shield className="w-3 h-3 mr-1" />
-            Admin
-          </>
-        ) : (
-          <>
-            <Users className="w-3 h-3 mr-1" />
-            Usuário
-          </>
-        )}
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.color}`}>
+        <IconComponent className="w-3 h-3 mr-1" />
+        {config.label}
       </span>
     );
   };
@@ -233,6 +329,7 @@ const UserManagement = () => {
         <main className={`flex-1 overflow-y-auto p-6 transition-colors duration-300
           ${darkMode ? "bg-gray-950" : "bg-gray-50"}
         `}>
+          <ToastContainer position="top-right" />
           <div className="max-w-7xl mx-auto">
             {/* Header */}
             <div className="mb-8">
@@ -243,7 +340,10 @@ const UserManagement = () => {
                     Gerencie todos os usuários do sistema
                   </p>
                 </div>
-                <button className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors">
+                <button 
+                  onClick={handleCreate}
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors"
+                >
                   <UserPlus className="w-4 h-4 mr-2" />
                   Novo Usuário
                 </button>
@@ -287,9 +387,9 @@ const UserManagement = () => {
                 <div className="flex items-center">
                   <Users className={`w-8 h-8 ${darkMode ? "text-orange-400" : "text-orange-500"}`} />
                   <div className="ml-4">
-                    <p className={`text-sm ${darkMode ? "text-gray-400" : "text-gray-500"}`}>Usuários Comuns</p>
+                    <p className={`text-sm ${darkMode ? "text-gray-400" : "text-gray-500"}`}>Managers</p>
                     <p className="text-2xl font-bold">
-                      {users.filter(u => u.role === 'user').length}
+                      {users.filter(u => u.role === 'manager').length}
                     </p>
                   </div>
                 </div>
@@ -340,6 +440,7 @@ const UserManagement = () => {
                   >
                     <option value="all">Todos os cargos</option>
                     <option value="admin">Administradores</option>
+                    <option value="manager">Managers</option>
                     <option value="user">Usuários</option>
                   </select>
                 </div>
@@ -380,6 +481,8 @@ const UserManagement = () => {
                             <div className={`w-10 h-10 rounded-full flex items-center justify-center font-medium ${
                               user.role === 'admin' 
                                 ? 'bg-blue-500 text-white' 
+                                : user.role === 'manager'
+                                ? 'bg-purple-500 text-white'
                                 : 'bg-gray-400 text-white'
                             }`}>
                               {user.name.charAt(0).toUpperCase()}
@@ -463,6 +566,256 @@ const UserManagement = () => {
         </main>
       </div>
 
+      {/* Create Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className={`rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto ${
+            darkMode ? "bg-gray-900" : "bg-white"
+          }`}>
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold">Criar Novo Usuário</h3>
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className={`p-1 rounded-lg ${
+                    darkMode ? "hover:bg-gray-800" : "hover:bg-gray-100"
+                  }`}
+                >
+                  <XCircle className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium mb-2">
+                    Nome Completo <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={createForm.name}
+                    onChange={(e) => setCreateForm({...createForm, name: e.target.value})}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
+                      darkMode 
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                        : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
+                    }`}
+                    placeholder="Digite o nome completo"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium mb-2">
+                    Email <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={createForm.email}
+                    onChange={(e) => setCreateForm({...createForm, email: e.target.value})}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
+                      darkMode 
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                        : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
+                    }`}
+                    placeholder="Digite o email"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Telefone</label>
+                  <input
+                    type="text"
+                    value={createForm.phone}
+                    onChange={(e) => setCreateForm({...createForm, phone: e.target.value})}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
+                      darkMode 
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                        : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
+                    }`}
+                    placeholder="Digite o telefone"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Gênero</label>
+                  <select
+                    value={createForm.gender}
+                    onChange={(e) => setCreateForm({...createForm, gender: e.target.value})}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
+                      darkMode 
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                        : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
+                    }`}
+                  >
+                    <option value="">Selecione</option>
+                    <option value="male">Masculino</option>
+                    <option value="female">Feminino</option>
+                    <option value="other">Outro</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Senha <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="password"
+                      value={createForm.password}
+                      onChange={(e) => setCreateForm({...createForm, password: e.target.value})}
+                      className={`w-full px-3 py-2 rounded-lg border transition-colors ${
+                        darkMode 
+                          ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                          : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
+                      }`}
+                      placeholder="Digite a senha"
+                    />
+                    <Key className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${
+                      darkMode ? "text-gray-400" : "text-gray-500"
+                    }`} />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Confirmar Senha <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="password"
+                      value={createForm.confirmPassword}
+                      onChange={(e) => setCreateForm({...createForm, confirmPassword: e.target.value})}
+                      className={`w-full px-3 py-2 rounded-lg border transition-colors ${
+                        darkMode 
+                          ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                          : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
+                      }`}
+                      placeholder="Confirme a senha"
+                    />
+                    <Key className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${
+                      darkMode ? "text-gray-400" : "text-gray-500"
+                    }`} />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Cargo</label>
+                  <select
+                    value={createForm.role}
+                    onChange={(e) => setCreateForm({...createForm, role: e.target.value})}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
+                      darkMode 
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                        : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
+                    }`}
+                  >
+                    <option value="user">Usuário</option>
+                    <option value="manager">Manager</option>
+                    <option value="admin">Administrador</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Status</label>
+                  <select
+                    value={createForm.is_active}
+                    onChange={(e) => setCreateForm({...createForm, is_active: e.target.value})}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
+                      darkMode 
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                        : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
+                    }`}
+                  >
+                    <option value="1">Ativo</option>
+                    <option value="0">Inativo</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">País</label>
+                  <input
+                    type="text"
+                    value={createForm.country}
+                    onChange={(e) => setCreateForm({...createForm, country: e.target.value})}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
+                      darkMode 
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                        : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
+                    }`}
+                    placeholder="Digite o país"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Estado</label>
+                  <input
+                    type="text"
+                    value={createForm.state}
+                    onChange={(e) => setCreateForm({...createForm, state: e.target.value})}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
+                      darkMode 
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                        : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
+                    }`}
+                    placeholder="Digite o estado"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Cidade</label>
+                  <input
+                    type="text"
+                    value={createForm.city}
+                    onChange={(e) => setCreateForm({...createForm, city: e.target.value})}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
+                      darkMode 
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                        : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
+                    }`}
+                    placeholder="Digite a cidade"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Bairro</label>
+                  <input
+                    type="text"
+                    value={createForm.neighborhood}
+                    onChange={(e) => setCreateForm({...createForm, neighborhood: e.target.value})}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
+                      darkMode 
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                        : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
+                    }`}
+                    placeholder="Digite o bairro"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-6 mt-6 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className={`px-4 py-2 rounded-lg border transition-colors ${
+                    darkMode 
+                      ? "border-gray-600 text-gray-300 hover:bg-gray-800" 
+                      : "border-gray-300 text-gray-700 hover:bg-gray-100"
+                  }`}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={createUser}
+                  disabled={actionLoading === 'create'}
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 flex items-center"
+                >
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  {actionLoading === 'create' ? 'Criando...' : 'Criar Usuário'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* View Modal */}
       {showViewModal && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -487,6 +840,8 @@ const UserManagement = () => {
                   <div className={`w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold ${
                     selectedUser.role === 'admin' 
                       ? 'bg-blue-500 text-white' 
+                      : selectedUser.role === 'manager'
+                      ? 'bg-purple-500 text-white'
                       : 'bg-gray-400 text-white'
                   }`}>
                     {selectedUser.name.charAt(0).toUpperCase()}
@@ -610,6 +965,7 @@ const UserManagement = () => {
                       }`}
                     >
                       <option value="user">Usuário</option>
+                      <option value="manager">Manager</option>
                       <option value="admin">Administrador</option>
                     </select>
                   </div>

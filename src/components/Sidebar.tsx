@@ -12,7 +12,6 @@ import {
   Sun,
   ChevronDown,
   ChevronRight,
-  User,
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTheme } from "../context/ThemeContext";

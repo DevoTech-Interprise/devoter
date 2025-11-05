@@ -1,21 +1,13 @@
 import { useEffect, useState } from 'react';
-import { X, Palette, Loader2, Edit2, Plus, Trash2 } from 'lucide-react';
+import { X, Palette, Loader2, Edit2, Plus, Trash2, Users } from 'lucide-react';
 import Sidebar from '../../components/Sidebar';
 import { campaignService } from '../../services/campaignService';
-import type { CampaignPayload } from '../../services/campaignService';
+import { userService } from '../../services/userService';
+import type { CampaignPayload, Campaign } from '../../services/campaignService';
+import type { User } from '../../services/userService';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useUser } from '../../context/UserContext';
-
-type Campaign = {
-    id: number | string;
-    name: string;
-    description: string;
-    logo: string;
-    color_primary: string;
-    color_secondary: string;
-    created_by?: number | string;
-};
 
 type FormData = {
     name: string;
@@ -23,12 +15,16 @@ type FormData = {
     logo: File | string;
     color_primary: string;
     color_secondary: string;
+    operator: string; // String única com IDs separados por vírgula
 };
 
 const CampaignsPage = () => {
     const { user, updateCampaign, refreshUser } = useUser();
     const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+    const [availableManagers, setAvailableManagers] = useState<User[]>([]);
+    const [allManagers, setAllManagers] = useState<User[]>([]);
     const [loading, setLoading] = useState(false);
+    const [loadingManagers, setLoadingManagers] = useState(false);
     const [imageValid, setImageValid] = useState(true);
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<Campaign | null>(null);
@@ -41,14 +37,33 @@ const CampaignsPage = () => {
         logo: '',
         color_primary: '#FCAF15',
         color_secondary: '#0833AF',
+        operator: '', // String vazia inicialmente
     });
     const [logoPreview, setLogoPreview] = useState<string>('');
+
+    // Buscar managers disponíveis (sem campaign_id)
+    const fetchAvailableManagers = async () => {
+        try {
+            setLoadingManagers(true);
+            const available = await userService.getAvailableManagers();
+            setAvailableManagers(available);
+
+            // Buscar todos os managers para exibir nomes nos cards
+            const allUsers = await userService.getAll();
+            const allManagerUsers = allUsers.filter(user => user.role === 'manager');
+            setAllManagers(allManagerUsers);
+        } catch (err) {
+            console.error('Erro ao carregar managers:', err);
+            toast.error('Erro ao carregar lista de operadores');
+        } finally {
+            setLoadingManagers(false);
+        }
+    };
 
     const fetchCampaigns = async () => {
         try {
             setLoading(true);
             const data = await campaignService.getAll();
-            // Garantir que data é um array
             const list = Array.isArray(data) ? data : [];
             const userId = user?.id;
             const filtered = userId ? list.filter((c: Campaign) => String(c.created_by) === String(userId)) : list;
@@ -64,42 +79,53 @@ const CampaignsPage = () => {
 
     useEffect(() => {
         fetchCampaigns();
+        fetchAvailableManagers();
     }, [user]);
 
-    // Atualizar quando o usuário mudar
     useEffect(() => {
         setActiveCampaignId(user?.campaign_id || null);
     }, [user?.campaign_id]);
 
     const openCreate = () => {
         setEditing(null);
-        setForm({ 
-            name: '', 
-            description: '', 
-            logo: '', 
-            color_primary: '#FCAF15', 
-            color_secondary: '#0833AF' 
+        setForm({
+            name: '',
+            description: '',
+            logo: '',
+            color_primary: '#FCAF15',
+            color_secondary: '#0833AF',
+            operator: '' // String vazia
         });
         setLogoPreview('');
         setFormOpen(true);
     };
 
-    const openEdit = (c: Campaign) => {
+    const openEdit = async (c: Campaign) => {
         setEditing(c);
         setForm({
             name: c.name,
             description: c.description,
-            logo: c.logo, // URL da imagem existente
+            logo: c.logo,
             color_primary: c.color_primary || '#FCAF15',
             color_secondary: c.color_secondary || '#0833AF',
+            operator: c.operator || '' // String com IDs separados por vírgula
         });
         setLogoPreview(c.logo);
         setFormOpen(true);
+
+        // Recarregar managers disponíveis ao editar
+        await fetchAvailableManagers();
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         setForm(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleOperatorChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const selectedOptions = Array.from(e.target.selectedOptions, option => option.value);
+        // Converter array para string separada por vírgulas
+        setForm(prev => ({ ...prev, operator: selectedOptions.join(',') }));
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -124,6 +150,7 @@ const CampaignsPage = () => {
         };
     };
 
+    // No handleSubmit, adicione logs para debug:
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -135,16 +162,21 @@ const CampaignsPage = () => {
         try {
             setSubmitting(true);
             const userId = user?.id;
-            
-            // Criar payload no formato esperado pelo service
+
+            console.log('Operadores selecionados:', form.operator);
+            console.log('IDs dos operadores:', getSelectedOperatorIds());
+
             const payload: CampaignPayload = {
                 name: form.name,
                 description: form.description,
                 color_primary: form.color_primary,
                 color_secondary: form.color_secondary,
                 created_by: userId?.toString(),
-                logo: form.logo instanceof File ? form.logo : form.logo || undefined
+                logo: form.logo instanceof File ? form.logo : form.logo || undefined,
+                operator: form.operator
             };
+
+            console.log('Payload enviado:', payload);
 
             if (editing) {
                 await campaignService.update(editing.id, payload);
@@ -156,8 +188,9 @@ const CampaignsPage = () => {
 
             setFormOpen(false);
             fetchCampaigns();
+            fetchAvailableManagers();
         } catch (err) {
-            console.error(err);
+            console.error('Erro ao salvar campanha:', err);
             toast.error('Erro ao salvar campanha');
         } finally {
             setSubmitting(false);
@@ -166,13 +199,10 @@ const CampaignsPage = () => {
 
     const handleSetActive = async (campaignId: string | number) => {
         try {
-            // Converter para string se necessário, baseado no que sua API espera
             const campaignIdStr = String(campaignId);
             await updateCampaign(campaignIdStr);
             setActiveCampaignId(campaignId);
             toast.success('Campanha ativada com sucesso');
-            
-            // Forçar atualização dos dados do usuário
             await refreshUser();
         } catch (err) {
             console.error(err);
@@ -189,15 +219,15 @@ const CampaignsPage = () => {
             setDeleting(campaignId);
             await campaignService.delete(campaignId);
             toast.success('Campanha excluída com sucesso');
-            
-            // Se a campanha excluída era a ativa, limpar a campanha ativa
+
             if (activeCampaignId === campaignId) {
                 await updateCampaign(null);
                 setActiveCampaignId(null);
                 await refreshUser();
             }
-            
+
             fetchCampaigns();
+            fetchAvailableManagers();
         } catch (err) {
             console.error(err);
             toast.error('Erro ao excluir campanha');
@@ -206,20 +236,34 @@ const CampaignsPage = () => {
         }
     };
 
-    // Escutar mudanças de campanha de outros componentes
+    // Função para obter nomes dos operadores - CORRIGIDA
+    const getOperatorNames = (operatorString: string = '') => {
+        if (!operatorString) return [];
+
+        const operatorIds = operatorString.split(',').filter(id => id.trim() !== '');
+        return operatorIds.map(operatorId => {
+            const manager = allManagers.find(m => m.id === operatorId);
+            return manager ? manager.name : 'Operador não encontrado';
+        });
+    };
+
+    // Função para obter IDs selecionados do form como array
+    const getSelectedOperatorIds = () => {
+        return form.operator ? form.operator.split(',').filter(id => id.trim() !== '') : [];
+    };
+
     useEffect(() => {
         const handleCampaignChange = (event: CustomEvent) => {
             setActiveCampaignId(event.detail.campaignId);
         };
 
         window.addEventListener('campaignChanged', handleCampaignChange as EventListener);
-        
+
         return () => {
             window.removeEventListener('campaignChanged', handleCampaignChange as EventListener);
         };
     }, []);
 
-    // Limpar preview quando modal fechar
     useEffect(() => {
         if (!formOpen && logoPreview.startsWith('blob:')) {
             URL.revokeObjectURL(logoPreview);
@@ -257,75 +301,105 @@ const CampaignsPage = () => {
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-                                {campaigns.map(c => (
-                                    <div
-                                        key={c.id}
-                                        className="group rounded-xl shadow-lg bg-white dark:bg-gray-800 pt-14 pb-6 px-6 transition hover:shadow-xl hover:-translate-y-1 border border-gray-100 dark:border-gray-700 relative"
-                                    >
-                                        <div className="absolute top-3 right-4 flex gap-2 z-10">
-                                            <button
-                                                onClick={() => openEdit(c)}
-                                                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-white font-semibold shadow transition"
-                                                title="Editar campanha"
-                                            >
-                                                <Edit2 className="w-4 h-4" />
-                                            </button>
-                                            <button
-                                                onClick={() => handleDelete(c.id)}
-                                                disabled={deleting === c.id}
-                                                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold shadow transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                                title="Excluir campanha"
-                                            >
-                                                {deleting === c.id ? (
-                                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                                ) : (
-                                                    <Trash2 className="w-4 h-4" />
-                                                )}
-                                            </button>
-                                        </div>
-                                        <div className="flex flex-col sm:flex-row gap-6 h-full items-stretch">
-                                            <div className="relative shrink-0 w-full sm:w-[140px] h-40 sm:h-full">
-                                                <img
-                                                    src={c.logo}
-                                                    alt={c.name}
-                                                    className="object-cover rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm w-full h-full"
-                                                />
-                                                <span className="absolute -top-1 -right-2 bg-blue-600 text-white text-xs px-2 py-1 rounded shadow">
-                                                    Logo
-                                                </span>
-                                            </div>
-                                            <div className="flex-1 flex flex-col min-w-0 h-full">
-                                                <h3
-                                                    className="text-xl font-bold text-gray-900 dark:text-white mb-2 wrap-break-word truncate"
-                                                    title={c.name}
-                                                >
-                                                    {c.name}
-                                                </h3>
-                                                <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3 mb-4 grow overflow-hidden">
-                                                    {c.description}
-                                                </p>
-                                                <div className="flex gap-3 items-center flex-wrap">
-                                                    <div className="rounded-lg border border-gray-200 dark:border-gray-700 flex items-center">
-                                                        <div className="w-10 h-10 rounded-l-lg" style={{ backgroundColor: c.color_primary || '#FCAF15' }} />
-                                                        <div className="w-10 h-10 rounded-r-lg" style={{ backgroundColor: c.color_secondary || '#0833AF' }} />
-                                                    </div>
-                                                    <span className="text-sm font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">
-                                                        Cores da campanha
-                                                    </span>
-                                                </div>
+                                {campaigns.map(c => {
+                                    const operatorNames = getOperatorNames(c.operator);
+                                    return (
+                                        <div
+                                            key={c.id}
+                                            className="group rounded-xl shadow-lg bg-white dark:bg-gray-800 pt-14 pb-6 px-6 transition hover:shadow-xl hover:-translate-y-1 border border-gray-100 dark:border-gray-700 relative"
+                                        >
+                                            <div className="absolute top-3 right-4 flex gap-2 z-10">
                                                 <button
-                                                    onClick={() => handleSetActive(c.id)}
-                                                    className={`mt-3 px-4 py-2 rounded-lg font-semibold shadow transition ${activeCampaignId === c.id
-                                                        ? 'bg-green-600 hover:bg-green-700 text-white'
-                                                        : 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200'
-                                                        }`}
+                                                    onClick={() => openEdit(c)}
+                                                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-white font-semibold shadow transition"
+                                                    title="Editar campanha"
                                                 >
-                                                    {activeCampaignId === c.id ? 'Ativo' : 'Ativar'}
+                                                    <Edit2 className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDelete(c.id)}
+                                                    disabled={deleting === c.id}
+                                                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold shadow transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    title="Excluir campanha"
+                                                >
+                                                    {deleting === c.id ? (
+                                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                                    ) : (
+                                                        <Trash2 className="w-4 h-4" />
+                                                    )}
                                                 </button>
                                             </div>
+                                            <div className="flex flex-col sm:flex-row gap-6 h-full items-stretch">
+                                                <div className="relative shrink-0 w-full sm:w-[140px] h-40 sm:h-full">
+                                                    <img
+                                                        src={c.logo}
+                                                        alt={c.name}
+                                                        className="object-cover rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm w-full h-full"
+                                                    />
+                                                    <span className="absolute -top-1 -right-2 bg-blue-600 text-white text-xs px-2 py-1 rounded shadow">
+                                                        Logo
+                                                    </span>
+                                                </div>
+                                                <div className="flex-1 flex flex-col min-w-0 h-full">
+                                                    <h3
+                                                        className="text-xl font-bold text-gray-900 dark:text-white mb-2 wrap-break-word truncate"
+                                                        title={c.name}
+                                                    >
+                                                        {c.name}
+                                                    </h3>
+                                                    <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3 mb-4 grow overflow-hidden">
+                                                        {c.description}
+                                                    </p>
+
+                                                    {/* Operadores da campanha */}
+                                                    <div className="mb-4">
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <Users className="w-4 h-4 text-gray-500" />
+                                                            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                                                                Operadores:
+                                                            </span>
+                                                        </div>
+                                                        {operatorNames.length > 0 ? (
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {operatorNames.map((operatorName, index) => (
+                                                                    <span
+                                                                        key={index}
+                                                                        className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs rounded-full"
+                                                                    >
+                                                                        {operatorName}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                                                                Nenhum operador atribuído
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="flex gap-3 items-center flex-wrap mb-4">
+                                                        <div className="rounded-lg border border-gray-200 dark:border-gray-700 flex items-center">
+                                                            <div className="w-10 h-10 rounded-l-lg" style={{ backgroundColor: c.color_primary || '#FCAF15' }} />
+                                                            <div className="w-10 h-10 rounded-r-lg" style={{ backgroundColor: c.color_secondary || '#0833AF' }} />
+                                                        </div>
+                                                        <span className="text-sm font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                                                            Cores da campanha
+                                                        </span>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleSetActive(c.id)}
+                                                        className={`mt-3 px-4 py-2 rounded-lg font-semibold shadow transition ${activeCampaignId === c.id
+                                                            ? 'bg-green-600 hover:bg-green-700 text-white'
+                                                            : 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200'
+                                                            }`}
+                                                    >
+                                                        {activeCampaignId === c.id ? 'Ativo' : 'Ativar'}
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
                     </section>
@@ -333,7 +407,7 @@ const CampaignsPage = () => {
                     {/* Modal criação/edição */}
                     {formOpen && (
                         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-fadeIn">
-                            <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-xl p-8 relative border border-gray-200 dark:border-gray-700">
+                            <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl p-8 relative border border-gray-200 dark:border-gray-700 max-h-[90vh] overflow-y-auto">
                                 <button
                                     className="absolute top-4 right-4 text-gray-400 hover:text-red-500 transition"
                                     onClick={() => setFormOpen(false)}
@@ -393,6 +467,64 @@ const CampaignsPage = () => {
                                             rows={3}
                                             required
                                         />
+                                    </div>
+
+                                    {/* Seletor de Operadores */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+                                            <Users className="w-4 h-4 inline mr-2" />
+                                            Operadores (Managers Disponíveis)
+                                        </label>
+                                        {loadingManagers ? (
+                                            <div className="flex items-center gap-2 text-gray-500">
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                                Carregando operadores...
+                                            </div>
+                                        ) : availableManagers.length === 0 ? (
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                Nenhum operador disponível. Todos os managers já estão vinculados a campanhas.
+                                            </p>
+                                        ) : (
+                                            <>
+                                                <select
+                                                    multiple
+                                                    value={getSelectedOperatorIds()} // Array de IDs selecionados
+                                                    onChange={handleOperatorChange}
+                                                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 text-gray-900 dark:text-white min-h-[100px]"
+                                                    size={4}
+                                                >
+                                                    {availableManagers.map(manager => (
+                                                        <option key={manager.id} value={manager.id}>
+                                                            {manager.name} - {manager.email}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                                    Mantenha Ctrl (ou Cmd) pressionado para selecionar múltiplos operadores
+                                                </p>
+                                            </>
+                                        )}
+                                        {getSelectedOperatorIds().length > 0 && (
+                                            <div className="mt-2">
+                                                <p className="text-sm text-gray-600 dark:text-gray-300 mb-1">
+                                                    Operadores selecionados: {getSelectedOperatorIds().length}
+                                                </p>
+                                                <div className="flex flex-wrap gap-1">
+                                                    {getSelectedOperatorIds().map(operatorId => {
+                                                        const manager = availableManagers.find(m => m.id === operatorId) ||
+                                                            allManagers.find(m => m.id === operatorId);
+                                                        return manager ? (
+                                                            <span
+                                                                key={operatorId}
+                                                                className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs rounded-full"
+                                                            >
+                                                                {manager.name}
+                                                            </span>
+                                                        ) : null;
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

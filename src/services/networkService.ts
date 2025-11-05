@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+
 import api from './api';
 import { campaignService, type Campaign } from './campaignService';
 import { userService } from './userService';
@@ -462,7 +462,7 @@ export const networkService = {
   async getAllNetworksWithCampaigns(): Promise<NetworkWithCampaign[]> {
     try {
       const allNetworks = await this.getAllNetworks();
-      const networksWithCampaign: NetworkWithCampaign[] = [];
+  
 
       const promises = allNetworks.map(async (network) => {
         let campaign: Campaign | null = null;
