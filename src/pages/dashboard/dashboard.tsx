@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
-import { Users, Award, Send, Activity, UserPlus, ChevronDown, ChevronRight } from "lucide-react";
+import { Users, Award, Send, Activity, UserPlus, ChevronDown, ChevronRight, Target, Network, GitBranch, Zap, Building2 } from "lucide-react";
 import Sidebar from "../../components/Sidebar";
 import Header from "../../components/Header";
 import { useTheme } from "../../context/ThemeContext";
+import { useUser } from '../../context/UserContext';
 import { userService, type User } from '../../services/userService';
 import { campaignService } from '../../services/campaignService';
 import { networkService, type NetworkUser } from '../../services/networkService';
 
 const Dashboard = () => {
   const { darkMode } = useTheme();
+  const { user } = useUser();
   const [dashboardData, setDashboardData] = useState({
     totalSupporters: 0,
     campaigns: 0,
@@ -19,7 +21,10 @@ const Dashboard = () => {
       totalMembers: 0,
       directInvites: 0,
       adminCount: 0,
-      userCount: 0
+      userCount: 0,
+      networkDepth: 0,
+      averageInvites: 0,
+      totalCampaigns: 0
     },
     growthStats: {
       supportersGrowth: '',
@@ -28,45 +33,148 @@ const Dashboard = () => {
       engagementGrowth: ''
     }
   });
-  const [networkTree, setNetworkTree] = useState<NetworkUser[]>([]);
-  const [expandedNodes, setExpandedNodes] = useState<Set<number>>(new Set());
+  const [accessibleCampaigns, setAccessibleCampaigns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedView, setSelectedView] = useState<'overview' | 'hierarchy'>('overview');
 
   useEffect(() => {
-    loadDashboardData();
-  }, []);
+    if (user?.id) {
+      loadDashboardData();
+    }
+  }, [user]);
+
+  // Buscar campanhas que o usuário pode acessar
+  const fetchAccessibleCampaigns = async (): Promise<any[]> => {
+    if (!user?.id) return [];
+
+    try {
+      const campaigns = await networkService.getUserAccessibleCampaigns(user.id);
+      setAccessibleCampaigns(campaigns);
+      return campaigns;
+    } catch (error) {
+      console.error('Erro ao buscar campanhas acessíveis:', error);
+      return [];
+    }
+  };
+
+  // Buscar redes das campanhas acessíveis
+  const fetchAccessibleNetworks = async (campaigns: any[]): Promise<NetworkUser[]> => {
+    if (!user?.id || campaigns.length === 0) return [];
+
+    const networks: NetworkUser[] = [];
+
+    for (const campaign of campaigns) {
+      try {
+        // Determinar quem é o root da rede para esta campanha
+        let networkRootUserId: string | number;
+
+        if (campaign.created_by.toString() === user.id.toString()) {
+          networkRootUserId = user.id;
+        } else if (campaign.operator && campaign.operator.split(',').map((id: string) => id.trim()).includes(user.id)) {
+          networkRootUserId = campaign.created_by;
+        } else {
+          networkRootUserId = campaign.created_by;
+        }
+
+        // Buscar a rede usando a rota específica por campanha
+        const campaignNetwork = await networkService.getNetworkTreeByCampaign(
+          campaign.id.toString(), 
+          networkRootUserId
+        );
+        networks.push(campaignNetwork);
+      } catch (error) {
+        console.error(`Erro ao buscar rede da campanha ${campaign.name}:`, error);
+      }
+    }
+
+    return networks;
+  };
+
+  // Calcular estatísticas consolidadas de todas as redes acessíveis
+  const calculateConsolidatedNetworkStats = (networks: NetworkUser[]) => {
+    if (networks.length === 0) {
+      return {
+        totalMembers: 0,
+        directInvites: 0,
+        adminCount: 0,
+        userCount: 0,
+        networkDepth: 0,
+        averageInvites: 0,
+        totalCampaigns: networks.length
+      };
+    }
+
+    let totalMembers = 0;
+    let totalDirectInvites = 0;
+    let totalAdminCount = 0;
+    let totalUserCount = 0;
+    let maxNetworkDepth = 0;
+    let totalNodes = 0;
+    let totalInvites = 0;
+
+    networks.forEach(network => {
+      const stats = calculateRealNetworkStats(network);
+      totalMembers += stats.totalMembers;
+      totalDirectInvites += stats.directInvites;
+      totalAdminCount += stats.adminCount;
+      totalUserCount += stats.userCount;
+      maxNetworkDepth = Math.max(maxNetworkDepth, stats.networkDepth);
+      totalNodes += stats.totalMembers;
+      totalInvites += stats.directInvites;
+    });
+
+    const averageInvites = totalNodes > 0 ? Math.round((totalInvites / totalNodes) * 10) / 10 : 0;
+
+    return {
+      totalMembers,
+      directInvites: totalDirectInvites,
+      adminCount: totalAdminCount,
+      userCount: totalUserCount,
+      networkDepth: maxNetworkDepth,
+      averageInvites,
+      totalCampaigns: networks.length
+    };
+  };
 
   const loadDashboardData = async () => {
     try {
       setLoading(true);
+      if (!user?.id) return;
+
+      // Buscar campanhas acessíveis primeiro
+      const accessibleCampaigns = await fetchAccessibleCampaigns();
       
-      // Buscar dados em paralelo
-      const [usersResponse, campaignsResponse, networksResponse] = await Promise.all([
+      // Buscar dados em paralelo para as campanhas acessíveis
+      const [usersResponse, networksResponse] = await Promise.all([
         userService.getAll(),
-        campaignService.getAll(),
-        networkService.getAllNetworks()
+        fetchAccessibleNetworks(accessibleCampaigns)
       ]);
 
       const users = usersResponse;
-      const campaigns = campaignsResponse;
       const networks = networksResponse;
 
-      // Calcular estatísticas dos usuários
-      const activeUsers = users.filter(user => user.is_active === "1");
+      // Filtrar usuários apenas das campanhas acessíveis
+      const accessibleCampaignIds = accessibleCampaigns.map(campaign => campaign.id.toString());
+      const accessibleUsers = users.filter(user => 
+        user.campaign_id && accessibleCampaignIds.includes(user.campaign_id)
+      );
+
+      // Calcular estatísticas dos usuários acessíveis
+      const activeUsers = accessibleUsers.filter(user => user.is_active === "1");
       const totalSupporters = activeUsers.length;
-      const totalCampaigns = campaigns.length;
+      const totalCampaigns = accessibleCampaigns.length;
       
       // Calcular convites enviados (usuários com invited_by preenchido)
-      const invitationsSent = users.filter(user => user.invited_by !== null).length;
+      const invitationsSent = accessibleUsers.filter(user => user.invited_by !== null).length;
       
       // Calcular taxa de engajamento (usuários ativos / total de usuários * 100)
-      const engagementRate = users.length > 0 ? (activeUsers.length / users.length) * 100 : 0;
+      const engagementRate = accessibleUsers.length > 0 ? (activeUsers.length / accessibleUsers.length) * 100 : 0;
 
       // Calcular métricas de crescimento
-      const growthStats = calculateGrowthMetrics(users, campaigns);
+      const growthStats = calculateGrowthMetrics(accessibleUsers, accessibleCampaigns);
 
-      // Buscar atividade recente (últimos 5 usuários criados)
-      const recentUsers = users
+      // Buscar atividade recente (últimos 5 usuários criados das campanhas acessíveis)
+      const recentUsers = accessibleUsers
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         .slice(0, 5);
 
@@ -79,7 +187,7 @@ const Dashboard = () => {
       }));
 
       // Adicionar atividades de campanhas recentes
-      const recentCampaigns = campaigns
+      const recentCampaigns = accessibleCampaigns
         .sort((a, b) => new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime())
         .slice(0, 2);
 
@@ -96,27 +204,12 @@ const Dashboard = () => {
       // Ordenar atividades por data e pegar as 5 mais recentes
       const sortedActivities = recentActivity
         .sort((a, b) => {
-          // Ordenar pelas datas reais dos usuários/campanhas
           return new Date(getActivityDate(b)).getTime() - new Date(getActivityDate(a)).getTime();
         })
         .slice(0, 5);
 
-      // Calcular estatísticas da rede a partir da estrutura real
-      let networkStats = {
-        totalMembers: 0,
-        directInvites: 0,
-        adminCount: 0,
-        userCount: 0
-      };
-
-      if (networks && networks.length > 0) {
-        // Usar a primeira rede (renanarruda) como principal para estatísticas
-        const mainNetwork = networks[0];
-        networkStats = calculateRealNetworkStats(mainNetwork);
-        setNetworkTree(networks);
-        // Expandir o nó raiz por padrão
-        setExpandedNodes(new Set([networks[0].id]));
-      }
+      // Calcular estatísticas da rede a partir das redes acessíveis
+      const networkStats = calculateConsolidatedNetworkStats(networks);
 
       setDashboardData({
         totalSupporters,
@@ -199,7 +292,7 @@ const Dashboard = () => {
   // Calcular estatísticas reais da rede baseada na estrutura do seu JSON
   const calculateRealNetworkStats = (networkUser: NetworkUser) => {
     const countTotalMembers = (node: NetworkUser): number => {
-      let count = 1; // contar o próprio nó
+      let count = 1;
       node.children.forEach(child => {
         count += countTotalMembers(child);
       });
@@ -214,16 +307,43 @@ const Dashboard = () => {
       return count;
     };
 
+    const calculateDepth = (node: NetworkUser): number => {
+      if (node.children.length === 0) return 1;
+      let maxDepth = 0;
+      node.children.forEach(child => {
+        maxDepth = Math.max(maxDepth, calculateDepth(child));
+      });
+      return maxDepth + 1;
+    };
+
+    const calculateAverageInvites = (node: NetworkUser): number => {
+      let totalNodes = 0;
+      let totalInvites = 0;
+
+      const traverse = (currentNode: NetworkUser) => {
+        totalNodes++;
+        totalInvites += currentNode.children.length;
+        currentNode.children.forEach(child => traverse(child));
+      };
+
+      traverse(node);
+      return totalNodes > 0 ? Math.round((totalInvites / totalNodes) * 10) / 10 : 0;
+    };
+
     const totalMembers = countTotalMembers(networkUser);
     const directInvites = networkUser.children.length;
     const adminCount = countByRole(networkUser, 'admin');
     const userCount = countByRole(networkUser, 'user');
+    const networkDepth = calculateDepth(networkUser);
+    const averageInvites = calculateAverageInvites(networkUser);
 
     return {
       totalMembers,
       directInvites,
       adminCount,
-      userCount
+      userCount,
+      networkDepth,
+      averageInvites
     };
   };
 
@@ -253,84 +373,268 @@ const Dashboard = () => {
     }
   };
 
-  // Funções para manipular a árvore de rede
-  const toggleNode = (nodeId: number) => {
-    const newExpandedNodes = new Set(expandedNodes);
-    if (newExpandedNodes.has(nodeId)) {
-      newExpandedNodes.delete(nodeId);
-    } else {
-      newExpandedNodes.add(nodeId);
-    }
-    setExpandedNodes(newExpandedNodes);
-  };
+  // === FUNÇÕES PARA VISUALIZAÇÃO VISUAL ===
 
-  const renderNetworkTree = (nodes: NetworkUser[], level = 0) => {
-    return nodes.map((node) => (
-      <div key={node.id} className="ml-4">
-        <div 
-          className={`flex items-center py-2 px-3 rounded-lg cursor-pointer transition-colors ${
-            darkMode 
-              ? 'hover:bg-gray-700' 
-              : 'hover:bg-gray-100'
-          } ${level === 0 ? 'border-l-4 border-blue-500' : ''}`}
-          onClick={() => toggleNode(node.id)}
-        >
-          <div className="flex items-center flex-1 min-w-0">
-            {node.children.length > 0 ? (
-              expandedNodes.has(node.id) ? (
-                <ChevronDown className="w-4 h-4 mr-2 flex-shrink-0" />
-              ) : (
-                <ChevronRight className="w-4 h-4 mr-2 flex-shrink-0" />
-              )
-            ) : (
-              <div className="w-4 h-4 mr-2 flex-shrink-0" />
-            )}
-            
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mr-3 ${
-              node.role === 'admin' 
-                ? 'bg-blue-500 text-white' 
-                : 'bg-gray-400 text-white'
-            }`}>
-              {node.name.charAt(0).toUpperCase()}
+  // Renderizar gráfico de rede circular
+  const renderNetworkRadialChart = () => {
+    const { totalMembers, directInvites, networkDepth, totalCampaigns } = dashboardData.networkStats;
+    
+    return (
+      <div className="flex flex-col items-center justify-center p-6">
+        {/* Gráfico Radial Principal */}
+        <div className="relative w-48 h-48 mb-6">
+          {/* Círculo de fundo */}
+          <div className="absolute inset-0 rounded-full border-8 border-gray-200 dark:border-gray-700"></div>
+          
+          {/* Círculo de membros (azul) */}
+          <div 
+            className="absolute inset-0 rounded-full border-8 border-blue-500"
+            style={{
+              clipPath: `conic-gradient(transparent 0%, blue ${Math.min(100, (totalMembers / 200) * 100)}%, transparent 0%)`
+            }}
+          ></div>
+          
+          {/* Círculo de campanhas (roxo) */}
+          <div 
+            className="absolute inset-2 rounded-full border-8 border-purple-500"
+            style={{
+              clipPath: `conic-gradient(transparent 0%, purple ${Math.min(100, (totalCampaigns / 10) * 100)}%, transparent 0%)`
+            }}
+          ></div>
+          
+          {/* Círculo de convites (verde) */}
+          <div 
+            className="absolute inset-4 rounded-full border-8 border-green-500"
+            style={{
+              clipPath: `conic-gradient(transparent 0%, green ${Math.min(100, (directInvites / 100) * 100)}%, transparent 0%)`
+            }}
+          ></div>
+          
+          {/* Centro do gráfico */}
+          <div className="absolute inset-8 rounded-full bg-white dark:bg-gray-800 flex items-center justify-center shadow-lg">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">{totalMembers}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Membros</div>
             </div>
-            
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center space-x-2">
-                <span className={`font-medium truncate ${
-                  darkMode ? 'text-white' : 'text-gray-900'
-                }`}>
-                  {node.name}
-                </span>
-                <span className={`text-xs px-2 py-1 rounded-full ${
-                  node.role === 'admin'
-                    ? 'bg-blue-100 text-blue-800'
-                    : 'bg-gray-100 text-gray-800'
-                }`}>
-                  {node.role}
-                </span>
-              </div>
-              <p className={`text-sm truncate ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                {node.email}
-              </p>
-            </div>
-            
-            {node.children.length > 0 && (
-              <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 ${
-                darkMode ? 'bg-gray-600 text-gray-300' : 'bg-gray-200 text-gray-700'
-              }`}>
-                {node.children.length} convite(s)
-              </span>
-            )}
           </div>
         </div>
-        
-        {expandedNodes.has(node.id) && node.children.length > 0 && (
-          <div className="border-l-2 border-gray-300 dark:border-gray-600 ml-2">
-            {renderNetworkTree(node.children, level + 1)}
+
+        {/* Legenda */}
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="flex items-center space-x-2">
+            <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+            <span className="text-gray-600 dark:text-gray-300">Membros</span>
           </div>
-        )}
+          <div className="flex items-center space-x-2">
+            <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+            <span className="text-gray-600 dark:text-gray-300">Campanhas</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <div className="w-3 h-3 rounded-full bg-green-500"></div>
+            <span className="text-gray-600 dark:text-gray-300">Convites</span>
+          </div>
+        </div>
       </div>
-    ));
+    );
+  };
+
+  // Renderizar gráfico de distribuição hierárquica
+  const renderHierarchyChart = () => {
+    const { totalMembers, directInvites, networkDepth, averageInvites } = dashboardData.networkStats;
+    
+    return (
+      <div className="p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Distribuição por Nível</h3>
+          <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
+            <Target className="w-4 h-4" />
+            <span>Profundidade: {networkDepth} níveis</span>
+          </div>
+        </div>
+
+        {/* Barras de nível */}
+        <div className="space-y-3">
+          {[1, 2, 3, 4, 5].map(level => (
+            <div key={level} className="flex items-center space-x-3">
+              <div className="w-16 text-sm text-gray-600 dark:text-gray-400 font-medium">
+                Nível {level}
+              </div>
+              <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-4 overflow-hidden">
+                <div 
+                  className="bg-gradient-to-r from-blue-500 to-purple-600 h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: `${Math.max(10, 100 - (level * 15))}%`
+                  }}
+                ></div>
+              </div>
+              <div className="w-12 text-right text-sm text-gray-600 dark:text-gray-400">
+                {Math.round(totalMembers * (0.3 - (level * 0.05)))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Estatísticas rápidas */}
+        <div className="grid grid-cols-2 gap-4 mt-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+          <div className="text-center">
+            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{directInvites}</div>
+            <div className="text-xs text-gray-600 dark:text-gray-400">Convites Diretos</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-green-600 dark:text-green-400">{averageInvites}</div>
+            <div className="text-xs text-gray-600 dark:text-gray-400">Média por Pessoa</div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Renderizar visualização de rede em forma de árvore
+  const renderNetworkTreeVisual = () => {
+    return (
+      <div className="p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Minhas Redes</h3>
+          <div className="flex items-center space-x-2 text-sm text-blue-600 dark:text-blue-400">
+            <Building2 className="w-4 h-4" />
+            <span>{dashboardData.networkStats.totalCampaigns} campanhas</span>
+          </div>
+        </div>
+
+        {/* Representação visual da rede */}
+        <div className="relative h-48 bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-800 dark:to-gray-900 rounded-lg p-4 overflow-hidden">
+          {/* Nó central (usuário principal) */}
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+            <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center shadow-lg border-2 border-white dark:border-gray-800">
+              <Users className="w-6 h-6 text-white" />
+            </div>
+          </div>
+
+          {/* Nós conectados - representando campanhas */}
+          {accessibleCampaigns.slice(0, 6).map((campaign, i) => {
+            const angle = (i / Math.min(6, accessibleCampaigns.length)) * 2 * Math.PI;
+            const radius = 70;
+            const x = 50 + radius * Math.cos(angle);
+            const y = 50 + radius * Math.sin(angle);
+            
+            return (
+              <div
+                key={campaign.id}
+                className="absolute w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-lg border-2 border-white dark:border-gray-800 animate-pulse"
+                style={{
+                  left: `${x}%`,
+                  top: `${y}%`,
+                  animationDelay: `${i * 0.2}s`
+                }}
+                title={campaign.name}
+              >
+                {campaign.name.charAt(0).toUpperCase()}
+              </div>
+            );
+          })}
+
+          {/* Linhas de conexão */}
+          <svg className="absolute inset-0 w-full h-full">
+            {accessibleCampaigns.slice(0, 6).map((_, i) => {
+              const angle = (i / Math.min(6, accessibleCampaigns.length)) * 2 * Math.PI;
+              const radius = 70;
+              const x1 = 50;
+              const y1 = 50;
+              const x2 = 50 + radius * Math.cos(angle);
+              const y2 = 50 + radius * Math.sin(angle);
+              
+              return (
+                <line
+                  key={i}
+                  x1={`${x1}%`}
+                  y1={`${y1}%`}
+                  x2={`${x2}%`}
+                  y2={`${y2}%`}
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="text-blue-300 dark:text-blue-700"
+                  strokeDasharray="4,4"
+                />
+              );
+            })}
+          </svg>
+        </div>
+
+        {/* Indicadores de crescimento */}
+        <div className="grid grid-cols-3 gap-2 mt-4">
+          <div className="text-center p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
+            <div className="text-green-600 dark:text-green-400 font-bold">+{dashboardData.networkStats.directInvites}</div>
+            <div className="text-xs text-green-700 dark:text-green-300">Diretos</div>
+          </div>
+          <div className="text-center p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+            <div className="text-blue-600 dark:text-blue-400 font-bold">{dashboardData.networkStats.totalCampaigns}</div>
+            <div className="text-xs text-blue-700 dark:text-blue-300">Campanhas</div>
+          </div>
+          <div className="text-center p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+            <div className="text-purple-600 dark:text-purple-400 font-bold">{dashboardData.networkStats.averageInvites}</div>
+            <div className="text-xs text-purple-700 dark:text-purple-300">Média</div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Renderizar métricas de performance da rede
+  const renderNetworkMetrics = () => {
+    const { totalMembers, directInvites, networkDepth, totalCampaigns } = dashboardData.networkStats;
+    
+    const metrics = [
+      {
+        icon: <GitBranch className="w-5 h-5" />,
+        label: "Expansão da Rede",
+        value: `${totalMembers} pessoas`,
+        progress: Math.min(100, (totalMembers / 500) * 100),
+        color: "blue"
+      },
+      {
+        icon: <Target className="w-5 h-5" />,
+        label: "Taxa de Conversão",
+        value: `${Math.round((directInvites / Math.max(1, totalMembers)) * 100)}%`,
+        progress: Math.min(100, (directInvites / Math.max(1, totalMembers)) * 100),
+        color: "green"
+      },
+      {
+        icon: <Building2 className="w-5 h-5" />,
+        label: "Campanhas Ativas",
+        value: `${totalCampaigns}`,
+        progress: Math.min(100, (totalCampaigns / 10) * 100),
+        color: "purple"
+      }
+    ];
+
+    return (
+      <div className="p-6">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Métricas de Performance</h3>
+        <div className="space-y-4">
+          {metrics.map((metric, index) => (
+            <div key={index} className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <div className={`text-${metric.color}-500`}>{metric.icon}</div>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {metric.label}
+                  </span>
+                </div>
+                <span className="text-sm font-bold text-gray-900 dark:text-white">
+                  {metric.value}
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                <div 
+                  className={`bg-${metric.color}-500 h-2 rounded-full transition-all duration-500`}
+                  style={{ width: `${metric.progress}%` }}
+                ></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   if (loading) {
@@ -374,7 +678,7 @@ const Dashboard = () => {
           `}
         >
           <div className="max-w-7xl mx-auto">
-            {/* Cards */}
+            {/* Cards Principais */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
               <Card
                 title="Total de Apoiadores"
@@ -382,16 +686,16 @@ const Dashboard = () => {
                 icon={<Users className="text-blue-500 w-8 h-8" />}
                 color="blue"
                 change={dashboardData.growthStats.supportersGrowth}
-                note="desde último mês"
+                note="nas minhas campanhas"
                 isNegative={dashboardData.growthStats.supportersGrowth.includes('-')}
               />
               <Card
-                title="Campanhas Ativas"
+                title="Minhas Campanhas"
                 value={dashboardData.campaigns.toString()}
                 icon={<Award className="text-purple-500 w-8 h-8" />}
                 color="purple"
                 change={dashboardData.growthStats.campaignsGrowth}
-                note="criadas esta semana"
+                note="que crio ou gerencio"
               />
               <Card
                 title="Convites Enviados"
@@ -450,101 +754,129 @@ const Dashboard = () => {
                   ))
                 ) : (
                   <p className={`text-center py-4 ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
-                    Nenhuma atividade recente
+                    Nenhuma atividade recente nas suas campanhas
                   </p>
                 )}
               </div>
             </section>
 
-            {/* Rede de Apoio */}
+            {/* Rede de Apoio - VISUALIZAÇÃO ATUALIZADA */}
             <section
-              className={`rounded-lg shadow p-6 transition-colors duration-300
+              className={`rounded-lg shadow transition-colors duration-300
                 ${darkMode ? "bg-gray-900" : "bg-white"}
               `}
             >
-              <div className="flex justify-between items-center mb-6">
+              <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
                 <h2
                   className={`text-xl font-bold ${
                     darkMode ? "text-gray-100" : "text-gray-800"
                   }`}
                 >
-                  Rede de Apoio - {dashboardData.networkStats.totalMembers} Membros
+                  Minhas Redes - {dashboardData.networkStats.totalMembers} Membros
                 </h2>
                 <div className="flex space-x-2">
                   <button
-                    className={`px-3 py-1 border rounded text-sm font-medium transition-colors
-                      ${
-                        darkMode
-                          ? "border-blue-500 bg-blue-950 text-blue-300"
-                          : "border-blue-500 bg-blue-50 text-blue-600"
-                      }
-                    `}
+                    onClick={() => setSelectedView('overview')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      selectedView === 'overview'
+                        ? darkMode
+                          ? "bg-blue-600 text-white"
+                          : "bg-blue-500 text-white"
+                        : darkMode
+                        ? "bg-gray-800 text-gray-200 hover:bg-gray-700"
+                        : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                    }`}
                   >
                     Visão Geral
                   </button>
                   <button
-                    className={`px-3 py-1 border rounded text-sm font-medium transition-colors
-                      ${
-                        darkMode
-                          ? "border-gray-700 text-gray-200 hover:bg-gray-800"
-                          : "border-gray-300 text-gray-700 hover:bg-gray-100"
-                      }
-                    `}
+                    onClick={() => setSelectedView('hierarchy')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      selectedView === 'hierarchy'
+                        ? darkMode
+                          ? "bg-blue-600 text-white"
+                          : "bg-blue-500 text-white"
+                        : darkMode
+                        ? "bg-gray-800 text-gray-200 hover:bg-gray-700"
+                        : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                    }`}
                   >
                     Hierarquia
                   </button>
                 </div>
               </div>
               
-              {/* Estatísticas da Rede */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <StatCard
-                  title="Total na Rede"
-                  value={dashboardData.networkStats.totalMembers}
-                  subtitle="membros"
-                  darkMode={darkMode}
-                />
-                <StatCard
-                  title="Convites Diretos"
-                  value={dashboardData.networkStats.directInvites}
-                  subtitle="primeiro nível"
-                  darkMode={darkMode}
-                />
-                <StatCard
-                  title="Administradores"
-                  value={dashboardData.networkStats.adminCount}
-                  subtitle="na rede"
-                  darkMode={darkMode}
-                />
-                <StatCard
-                  title="Apoiadores"
-                  value={dashboardData.networkStats.userCount}
-                  subtitle="usuários"
-                  darkMode={darkMode}
-                />
-              </div>
-
-              <div
-                className={`h-96 rounded-lg transition-colors overflow-y-auto
-                  ${darkMode ? "bg-gray-800" : "bg-gray-100"}
-                `}
-              >
-                {networkTree.length > 0 ? (
-                  <div className="p-4">
-                    <h3 className={`text-lg font-semibold mb-4 ${
-                      darkMode ? 'text-white' : 'text-gray-900'
+              {/* Conteúdo da Visualização */}
+              <div className="p-6">
+                {selectedView === 'overview' ? (
+                  // VISÃO GERAL - Layout com múltiplos gráficos
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Gráfico Radial */}
+                    <div className={`rounded-lg p-4 ${
+                      darkMode ? 'bg-gray-800' : 'bg-gray-50'
                     }`}>
-                      Estrutura da Rede
-                    </h3>
-                    {renderNetworkTree(networkTree)}
+                      {renderNetworkRadialChart()}
+                    </div>
+                    
+                    {/* Métricas de Performance */}
+                    <div className={`rounded-lg ${
+                      darkMode ? 'bg-gray-800' : 'bg-gray-50'
+                    }`}>
+                      {renderNetworkMetrics()}
+                    </div>
+                    
+                    {/* Visualização da Rede */}
+                    <div className="lg:col-span-2">
+                      {renderNetworkTreeVisual()}
+                    </div>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-center h-full">
-                    <div className="text-center">
-                      <Users className={`mx-auto w-12 h-12 ${darkMode ? "text-gray-600" : "text-gray-400"}`} />
-                      <p className={`mt-2 ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
-                        Nenhuma rede encontrada
-                      </p>
+                  // VISÃO DE HIERARQUIA
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Gráfico de Distribuição */}
+                    <div className={`rounded-lg ${
+                      darkMode ? 'bg-gray-800' : 'bg-gray-50'
+                    }`}>
+                      {renderHierarchyChart()}
+                    </div>
+                    
+                    {/* Estatísticas Detalhadas */}
+                    <div className={`rounded-lg p-6 ${
+                      darkMode ? 'bg-gray-800' : 'bg-gray-50'
+                    }`}>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                        Estatísticas da Rede
+                      </h3>
+                      <div className="space-y-4">
+                        <StatItem
+                          label="Total de Membros"
+                          value={dashboardData.networkStats.totalMembers}
+                          icon={<Users className="w-4 h-4" />}
+                          color="blue"
+                          darkMode={darkMode}
+                        />
+                        <StatItem
+                          label="Convites Diretos"
+                          value={dashboardData.networkStats.directInvites}
+                          icon={<Send className="w-4 h-4" />}
+                          color="green"
+                          darkMode={darkMode}
+                        />
+                        <StatItem
+                          label="Profundidade da Rede"
+                          value={dashboardData.networkStats.networkDepth}
+                          icon={<GitBranch className="w-4 h-4" />}
+                          color="purple"
+                          darkMode={darkMode}
+                        />
+                        <StatItem
+                          label="Média de Convites"
+                          value={dashboardData.networkStats.averageInvites}
+                          icon={<Target className="w-4 h-4" />}
+                          color="yellow"
+                          darkMode={darkMode}
+                        />
+                      </div>
                     </div>
                   </div>
                 )}
@@ -604,22 +936,18 @@ const ActivityItem = ({ icon, bg, text, time }: any) => {
   );
 };
 
-const StatCard = ({ title, value, subtitle, darkMode }: { title: string; value: number; subtitle: string; darkMode: boolean }) => {
+const StatItem = ({ label, value, icon, color, darkMode }: any) => {
   return (
-    <div
-      className={`rounded-lg p-4 text-center transition-colors duration-300
-        ${darkMode ? "bg-gray-800" : "bg-gray-50"}
-      `}
-    >
-      <p className={`text-sm ${darkMode ? "text-gray-400" : "text-gray-500"} mb-1`}>
-        {title}
-      </p>
-      <p className={`text-2xl font-bold ${darkMode ? "text-white" : "text-gray-900"}`}>
+    <div className="flex items-center justify-between p-3 rounded-lg bg-white dark:bg-gray-700 shadow-sm">
+      <div className="flex items-center space-x-3">
+        <div className={`text-${color}-500`}>{icon}</div>
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+          {label}
+        </span>
+      </div>
+      <span className="text-lg font-bold text-gray-900 dark:text-white">
         {value}
-      </p>
-      <p className={`text-xs ${darkMode ? "text-gray-500" : "text-gray-400"} mt-1`}>
-        {subtitle}
-      </p>
+      </span>
     </div>
   );
 };

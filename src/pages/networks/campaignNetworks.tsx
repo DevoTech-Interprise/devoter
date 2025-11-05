@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Users, Loader2, ChevronDown, ChevronRight, User, Mail, Crown, Shield, Search, Filter, Palette } from 'lucide-react';
+import { Users, Loader2, ChevronDown, ChevronRight, User, Mail, Crown, Shield, Search, Filter, Palette, Star, Building2 } from 'lucide-react';
 import Sidebar from '../../components/Sidebar';
 import { campaignService } from '../../services/campaignService';
 import { networkService, type NetworkUser } from '../../services/networkService';
+import { userService } from '../../services/userService';
+import { useUser } from '../../context/UserContext';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -14,12 +16,12 @@ interface Campaign {
     color_primary: string;
     color_secondary: string;
     created_by: number;
+    operator?: string;
 }
 
 // Adicione esta interface no campaignNetworks.tsx
 interface CampaignsResponse {
     campaigns?: Campaign[];
-    // Outras propriedades que podem vir na resposta
     [key: string]: any;
 }
 
@@ -36,16 +38,51 @@ interface CampaignWithNetworks {
         totalClasses: number;
         classDistribution: { [key: number]: number };
     };
+    userRole: 'creator' | 'manager' | 'none';
 }
 
 const CampaignNetworksPage = () => {
+    const { user } = useUser();
     const [campaignsWithNetworks, setCampaignsWithNetworks] = useState<CampaignWithNetworks[]>([]);
+    const [accessibleCampaigns, setAccessibleCampaigns] = useState<Campaign[]>([]);
     const [loading, setLoading] = useState(true);
     const [expandedNodes, setExpandedNodes] = useState<Set<number>>(new Set());
     const [expandedCampaigns, setExpandedCampaigns] = useState<Set<number>>(new Set());
     const [searchTerm, setSearchTerm] = useState('');
     const [filterClass, setFilterClass] = useState<number | 'all'>('all');
     const [nodesToExpand, setNodesToExpand] = useState<Set<number>>(new Set());
+
+    const isAdmin = user?.role === 'admin';
+
+    // Função para buscar campanhas que o usuário pode acessar
+    const fetchAccessibleCampaigns = async (): Promise<Campaign[]> => {
+        if (!user?.id) return [];
+
+        try {
+            // Para admin, buscar todas as campanhas que ele criou ou gerencia
+            const accessibleCampaigns = await networkService.getUserAccessibleCampaigns(user.id);
+            setAccessibleCampaigns(accessibleCampaigns);
+            return accessibleCampaigns;
+        } catch (error) {
+            console.error('Erro ao buscar campanhas acessíveis:', error);
+            return [];
+        }
+    };
+
+    // Função para determinar o papel do usuário na campanha
+    const getUserRoleInCampaign = (campaign: Campaign): 'creator' | 'manager' | 'none' => {
+        if (!user?.id) return 'none';
+
+        if (campaign.created_by.toString() === user.id.toString()) {
+            return 'creator';
+        }
+
+        if (campaign.operator && campaign.operator.split(',').map(id => id.trim()).includes(user.id)) {
+            return 'manager';
+        }
+
+        return 'none';
+    };
 
     // Função para calcular a classe de cada usuário na rede baseado na profundidade
     const calculateNetworkClasses = (network: NetworkUser, currentClass: number = 1): NetworkWithClass => {
@@ -102,34 +139,45 @@ const CampaignNetworksPage = () => {
         return [];
     };
 
-    // Buscar todas as campanhas e suas redes
-    // Buscar todas as campanhas e suas redes
+    // Buscar campanhas acessíveis e suas redes
     const fetchCampaignsWithNetworks = async () => {
         try {
             setLoading(true);
 
-            // Buscar todas as campanhas
-            const campaignsResponse = await campaignService.getAll();
+            // Buscar campanhas que o usuário pode acessar
+            const accessibleCampaigns = await fetchAccessibleCampaigns();
 
-            // Garantir que temos um array de campanhas
-            let campaigns: Campaign[] = [];
+            console.log('Campanhas acessíveis:', accessibleCampaigns.length); // Para debug
 
-            if (Array.isArray(campaignsResponse)) {
-                campaigns = campaignsResponse;
-            } else if (campaignsResponse && typeof campaignsResponse === 'object') {
-                // Se for um objeto, tenta acessar a propriedade campaigns
-                campaigns = (campaignsResponse as CampaignsResponse).campaigns || [];
-            }
-
-            console.log('Campanhas carregadas:', campaigns); // Para debug
-
-            // Para cada campanha, buscar as redes dos usuários que pertencem a ela
+            // Para cada campanha acessível, buscar as redes
             const campaignsWithNetworksData: CampaignWithNetworks[] = [];
 
-            for (const campaign of campaigns) {
+            for (const campaign of accessibleCampaigns) {
                 try {
-                    // Buscar a rede do criador da campanha
-                    const creatorNetwork = await networkService.getNetworkTree(campaign.created_by);
+                    // Determinar quem é o root da rede para esta campanha
+                    let networkRootUserId: string | number;
+
+                    // Se o usuário é o criador da campanha, usa ele mesmo como root
+                    if (campaign.created_by.toString() === user?.id.toString()) {
+                        networkRootUserId = user.id;
+                    } 
+                    // Se o usuário é manager (operator), usa o criador da campanha como root
+                    else if (campaign.operator && campaign.operator.split(',').map(id => id.trim()).includes(user?.id || '')) {
+                        networkRootUserId = campaign.created_by;
+                    }
+                    // Caso contrário, não deveria ter acesso (mas por segurança usa o criador)
+                    else {
+                        networkRootUserId = campaign.created_by;
+                    }
+
+                    console.log(`🔄 Processando campanha: ${campaign.name} (ID: ${campaign.id})`);
+                    console.log(`👑 Root da rede: ${networkRootUserId}`);
+
+                    // Buscar a rede usando a rota específica por campanha
+                    const creatorNetwork = await networkService.getNetworkTreeByCampaign(
+                        campaign.id.toString(), 
+                        networkRootUserId
+                    );
 
                     // Calcular classes hierárquicas
                     const networkWithClasses = calculateNetworkClasses(creatorNetwork);
@@ -137,15 +185,53 @@ const CampaignNetworksPage = () => {
                     // Calcular estatísticas da campanha
                     const stats = calculateCampaignStats(networkWithClasses);
 
+                    // Determinar papel do usuário na campanha
+                    const userRole = getUserRoleInCampaign(campaign);
+
                     campaignsWithNetworksData.push({
                         campaign,
                         networks: [networkWithClasses],
-                        stats
+                        stats,
+                        userRole
                     });
+
+                    console.log(`✅ Rede carregada para campanha ${campaign.name}: ${stats.totalMembers} membros`);
 
                 } catch (error) {
                     console.error(`Erro ao carregar rede da campanha ${campaign.name}:`, error);
-                    // Continuar com outras campanhas mesmo se uma falhar
+                    
+                    // Fallback: criar uma rede mínima
+                    try {
+                        const creatorData = await userService.getById(campaign.created_by.toString());
+                        const minimalNetwork: NetworkWithClass = {
+                            id: campaign.created_by,
+                            name: creatorData.name,
+                            email: creatorData.email,
+                            role: creatorData.role as 'admin' | 'user',
+                            campaign_id: campaign.id.toString(),
+                            phone: creatorData.phone,
+                            invited_by: creatorData.invited_by ? Number(creatorData.invited_by) : null,
+                            children: [],
+                            networkClass: 1
+                        };
+
+                        const userRole = getUserRoleInCampaign(campaign);
+
+                        campaignsWithNetworksData.push({
+                            campaign,
+                            networks: [minimalNetwork],
+                            stats: {
+                                totalMembers: 1,
+                                totalClasses: 1,
+                                classDistribution: { 1: 1 }
+                            },
+                            userRole
+                        });
+
+                        console.log(`🔄 Fallback criado para campanha ${campaign.name}`);
+                    } catch (fallbackError) {
+                        console.error(`Erro no fallback para campanha ${campaign.name}:`, fallbackError);
+                    }
                 }
             }
 
@@ -187,10 +273,11 @@ const CampaignNetworksPage = () => {
     };
 
     useEffect(() => {
-        fetchCampaignsWithNetworks();
-    }, []);
+        if (user?.id) {
+            fetchCampaignsWithNetworks();
+        }
+    }, [user]);
 
-    // Efeito para expandir nós quando filtrar por classe
     // Efeito para expandir nós quando filtrar por classe
     useEffect(() => {
         if (filterClass !== 'all') {
@@ -267,6 +354,8 @@ const CampaignNetworksPage = () => {
         switch (role) {
             case 'admin':
                 return <Crown className="w-4 h-4 text-yellow-500" />;
+            case 'manager':
+                return <Star className="w-4 h-4 text-purple-500" />;
             case 'user':
                 return <User className="w-4 h-4 text-blue-500" />;
             default:
@@ -278,10 +367,23 @@ const CampaignNetworksPage = () => {
         switch (role) {
             case 'admin':
                 return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+            case 'manager':
+                return 'bg-purple-100 text-purple-800 border-purple-200';
             case 'user':
                 return 'bg-blue-100 text-blue-800 border-blue-200';
             default:
                 return 'bg-gray-100 text-gray-800 border-gray-200';
+        }
+    };
+
+    const getUserRoleBadge = (userRole: 'creator' | 'manager' | 'none') => {
+        switch (userRole) {
+            case 'creator':
+                return <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full border border-green-200">Criador</span>;
+            case 'manager':
+                return <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full border border-purple-200">Manager</span>;
+            default:
+                return null;
         }
     };
 
@@ -344,7 +446,8 @@ const CampaignNetworksPage = () => {
                                     </div>
                                     <div className="flex gap-2 flex-wrap">
                                         <span className={`text-xs px-2 py-1 rounded-full border ${getRoleColor(node.role)}`}>
-                                            {node.role === 'admin' ? 'Administrador' : 'Usuário'}
+                                            {node.role === 'admin' ? 'Administrador' : 
+                                             node.role === 'manager' ? 'Manager' : 'Usuário'}
                                         </span>
                                         <span className={`text-xs px-2 py-1 rounded-full border ${getClassBadgeColor(node.networkClass)} ${isTargetClass ? 'ring-2 ring-red-500' : ''
                                             }`}>
@@ -442,16 +545,28 @@ const CampaignNetworksPage = () => {
                                         Redes por Campanha
                                     </h1>
                                     <p className="mt-2 text-gray-600 dark:text-gray-400">
-                                        Visualize as redes hierárquicas organizadas por campanha
+                                        Visualize as redes hierárquicas das campanhas que você {isAdmin ? 'cria ou gerencia' : 'participa'}
                                     </p>
                                 </div>
                             </div>
+
+                            {/* Informação de Acesso */}
+                            {accessibleCampaigns.length === 0 && (
+                                <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg">
+                                    <p className="text-yellow-800 dark:text-yellow-200">
+                                        {isAdmin 
+                                            ? 'Você não criou ou não gerencia nenhuma campanha.'
+                                            : 'Você não está associado a nenhuma campanha.'
+                                        }
+                                    </p>
+                                </div>
+                            )}
 
                             {/* Estatísticas Gerais */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                                 <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                                     <div className="text-center">
-                                        <p className="text-sm text-gray-600 dark:text-gray-400">Total de Campanhas</p>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400">Campanhas Acessíveis</p>
                                         <p className="text-2xl font-bold text-gray-900 dark:text-white">
                                             {totalStats.totalCampaigns}
                                         </p>
@@ -522,11 +637,10 @@ const CampaignNetworksPage = () => {
                             </div>
                         </header>
 
-                        {/* Resto do código permanece igual... */}
                         {/* Lista de Campanhas com Redes */}
                         <section className="space-y-6">
                             {filteredCampaigns.length > 0 ? (
-                                filteredCampaigns.map(({ campaign, networks, stats }) => (
+                                filteredCampaigns.map(({ campaign, networks, stats, userRole }) => (
                                     <div key={campaign.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                                         {/* Header da Campanha */}
                                         <div
@@ -543,7 +657,10 @@ const CampaignNetworksPage = () => {
                                                         className="w-16 h-16 rounded-lg object-cover border-2 border-white/20"
                                                     />
                                                     <div>
-                                                        <h3 className="text-2xl font-bold">{campaign.name}</h3>
+                                                        <div className="flex items-center gap-2">
+                                                            <h3 className="text-2xl font-bold">{campaign.name}</h3>
+                                                            {getUserRoleBadge(userRole)}
+                                                        </div>
                                                         <p className="text-sm opacity-90 mt-1">{campaign.description}</p>
                                                     </div>
                                                 </div>
@@ -617,7 +734,10 @@ const CampaignNetworksPage = () => {
                                 <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
                                     <Palette className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
                                     <p className="text-gray-500 dark:text-gray-400">
-                                        Nenhuma campanha encontrada com os filtros aplicados.
+                                        {accessibleCampaigns.length === 0
+                                            ? 'Nenhuma campanha encontrada para exibir.'
+                                            : 'Nenhuma campanha encontrada com os filtros aplicados.'
+                                        }
                                     </p>
                                 </div>
                             )}
@@ -625,22 +745,44 @@ const CampaignNetworksPage = () => {
 
                         {/* Legenda */}
                         <div className="mt-8 bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                            <h4 className="font-semibold text-gray-900 dark:text-white mb-3">Legenda de Classes</h4>
-                            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                                {[1, 2, 3, 4, 5].map(className => (
-                                    <div key={className} className={`flex items-center gap-2 p-2 rounded-lg ${className === filterClass
-                                        ? 'bg-red-50 dark:bg-red-900/30 border-2 border-red-500'
-                                        : 'bg-gray-50 dark:bg-gray-700'
-                                        }`}>
-                                        <div className={`w-3 h-3 rounded-full ${getClassColor(className)}`}></div>
-                                        <span className={`text-sm ${className === filterClass
-                                            ? 'text-red-700 dark:text-red-300 font-bold'
-                                            : 'text-gray-700 dark:text-gray-300'
-                                            }`}>
-                                            <strong>Classe {className}:</strong> {className === 1 ? 'Criador' : `Nível ${className}`}
-                                        </span>
+                            <h4 className="font-semibold text-gray-900 dark:text-white mb-3">Legenda</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <h5 className="font-medium text-gray-700 dark:text-gray-300 mb-2">Classes Hierárquicas</h5>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {[1, 2, 3, 4, 5].map(className => (
+                                            <div key={className} className={`flex items-center gap-2 p-2 rounded-lg ${className === filterClass
+                                                ? 'bg-red-50 dark:bg-red-900/30 border-2 border-red-500'
+                                                : 'bg-gray-50 dark:bg-gray-700'
+                                                }`}>
+                                                <div className={`w-3 h-3 rounded-full ${getClassColor(className)}`}></div>
+                                                <span className={`text-sm ${className === filterClass
+                                                    ? 'text-red-700 dark:text-red-300 font-bold'
+                                                    : 'text-gray-700 dark:text-gray-300'
+                                                    }`}>
+                                                    <strong>Classe {className}:</strong> {className === 1 ? 'Criador' : `Nível ${className}`}
+                                                </span>
+                                            </div>
+                                        ))}
                                     </div>
-                                ))}
+                                </div>
+                                <div>
+                                    <h5 className="font-medium text-gray-700 dark:text-gray-300 mb-2">Papéis na Campanha</h5>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center gap-2 p-2 rounded-lg bg-green-50 dark:bg-green-900/20">
+                                            <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                                            <span className="text-sm text-green-700 dark:text-green-300">
+                                                <strong>Criador:</strong> Você criou esta campanha
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-2 p-2 rounded-lg bg-purple-50 dark:bg-purple-900/20">
+                                            <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                                            <span className="text-sm text-purple-700 dark:text-purple-300">
+                                                <strong>Manager:</strong> Você gerencia esta campanha
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>

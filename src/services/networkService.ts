@@ -1,4 +1,3 @@
-
 import api from './api';
 import { campaignService, type Campaign } from './campaignService';
 import { userService } from './userService';
@@ -7,7 +6,7 @@ export interface NetworkUser {
   id: number;
   name: string;
   email: string;
-  role: 'admin' | 'user';
+  role: 'admin' | 'user' | 'manager';
   campaign_id: string | null;
   phone: string;
   invited_by: number | null;
@@ -32,20 +31,22 @@ export interface NetworkWithCampaign {
     directInvites: number;
     adminCount: number;
     userCount: number;
+    managerCount: number;
     networkDepth: number;
   };
 }
 
 export interface FullCampaignNetwork {
-  rootNetwork: NetworkUser; // Rede completa desde o criador da campanha
-  userPosition: NetworkUser | null; // Posição do usuário atual na rede
+  rootNetwork: NetworkUser;
+  userPosition: NetworkUser | null;
   campaign: Campaign | null;
-  campaignCreatorId: number | null; // ID do criador da campanha
+  campaignCreatorId: number | null;
   stats: {
     totalMembers: number;
     directInvites: number;
     adminCount: number;
     userCount: number;
+    managerCount: number;
     networkDepth: number;
   };
 }
@@ -62,129 +63,31 @@ export const networkService = {
   },
 
   /**
+   * NOVO: Busca a árvore de rede filtrada por campanha
+   * @param campaignId ID da campanha
+   * @param invitedById ID do usuário que convidou (normalmente o criador/manager)
+   * @returns Promise com a estrutura da rede filtrada por campanha
+   */
+  async getNetworkTreeByCampaign(campaignId: string | number , invitedById: string | number): Promise<NetworkUser> {
+    try {
+      const response = await api.post<NetworkResponse>('api/network/treeCampaign', {
+        campaign_id: campaignId,
+        invited_by: invitedById
+      });
+      return response.data.data;
+    } catch (error) {
+      console.error(`Erro ao buscar rede da campanha ${campaignId}:`, error);
+      throw error;
+    }
+  },
+
+  /**
    * Busca todas as redes da plataforma (apenas para admin)
    * @returns Promise com todas as redes
    */
   async getAllNetworks(): Promise<NetworkUser[]> {
     const response = await api.get<AllNetworksResponse>('api/network/tree');
     return response.data.data;
-  },
-
-  /**
-   * Busca a árvore de rede de um usuário específico FILTRADA por campanha
-   * @param userId ID do usuário
-   * @param campaignId ID da campanha para filtrar
-   * @returns Promise com a estrutura da rede filtrada por campanha
-   */
-  async getNetworkTreeByCampaign(userId: string | number, campaignId: string): Promise<NetworkUser> {
-    try {
-      // Busca a rede completa do usuário
-      const fullNetwork = await this.getNetworkTree(userId);
-      
-      // Filtra a rede para incluir apenas usuários da campanha específica
-      const filterNetworkByCampaign = (node: NetworkUser): NetworkUser | null => {
-        // Se o nó atual não pertence à campanha, retorna null
-        if (node.campaign_id !== campaignId) {
-          return null;
-        }
-        
-        // Filtra os filhos recursivamente
-        const filteredChildren: NetworkUser[] = [];
-        node.children.forEach(child => {
-          const filteredChild = filterNetworkByCampaign(child);
-          if (filteredChild) {
-            filteredChildren.push(filteredChild);
-          }
-        });
-        
-        return {
-          ...node,
-          children: filteredChildren
-        };
-      };
-      
-      const filteredNetwork = filterNetworkByCampaign(fullNetwork);
-      
-      if (!filteredNetwork) {
-        // Se não encontrou rede filtrada, cria uma rede mínima com o criador
-        const userData = await userService.getById(userId.toString());
-        return {
-          id: Number(userId),
-          name: userData.name,
-          email: userData.email,
-          role: userData.role as 'admin' | 'user',
-          campaign_id: campaignId,
-          phone: userData.phone,
-          invited_by: userData.invited_by ? Number(userData.invited_by) : null,
-          children: []
-        };
-      }
-      
-      return filteredNetwork;
-    } catch (error) {
-      console.error(`Erro ao buscar rede filtrada por campanha ${campaignId}:`, error);
-      throw error;
-    }
-  },
-
-  /**
-   * Constrói rede a partir de todos os usuários de uma campanha
-   */
-  async buildNetworkFromCampaignUsers(campaignId: string, creatorId: string | number): Promise<NetworkUser> {
-    try {
-      // Busca todos os usuários
-      const allUsers = await userService.getAll();
-      
-      // Filtra usuários da campanha específica
-      const campaignUsers = allUsers.filter(user => user.campaign_id === campaignId);
-      
-      if (campaignUsers.length === 0) {
-        // Se não há usuários, retorna apenas o criador
-        const creatorData = await userService.getById(creatorId.toString());
-        return {
-          id: Number(creatorId),
-          name: creatorData.name,
-          email: creatorData.email,
-          role: creatorData.role as 'admin' | 'user',
-          campaign_id: campaignId,
-          phone: creatorData.phone,
-          invited_by: creatorData.invited_by ? Number(creatorData.invited_by) : null,
-          children: []
-        };
-      }
-
-      // Função para construir a árvore
-      const buildTree = (userId: string): NetworkUser => {
-        const user = campaignUsers.find(u => u.id === userId);
-        if (!user) {
-          throw new Error(`Usuário ${userId} não encontrado na campanha ${campaignId}`);
-        }
-
-        const children = campaignUsers.filter(u => u.invited_by === userId);
-        
-        return {
-          id: Number(user.id),
-          name: user.name,
-          email: user.email,
-          role: user.role as 'admin' | 'user',
-          campaign_id: campaignId,
-          phone: user.phone,
-          invited_by: user.invited_by ? Number(user.invited_by) : null,
-          children: children.map(child => buildTree(child.id))
-        };
-      };
-
-      // Encontra o criador da campanha
-      const creatorInCampaign = campaignUsers.find(user => user.id === creatorId.toString());
-      if (!creatorInCampaign) {
-        throw new Error(`Criador ${creatorId} não encontrado na campanha ${campaignId}`);
-      }
-
-      return buildTree(creatorId.toString());
-    } catch (error) {
-      console.error(`Erro ao construir rede da campanha ${campaignId}:`, error);
-      throw error;
-    }
   },
 
   /**
@@ -232,64 +135,125 @@ export const networkService = {
   },
 
   /**
-   * Busca campanhas de um usuário com suas redes completas
-   * @param userId ID do usuário (admin)
+   * Busca campanhas que um usuário gerencia (onde ele é operator)
+   * @param userId ID do usuário
+   * @returns Promise com as campanhas gerenciadas pelo usuário
+   */
+  async getManagedCampaigns(userId: string | number): Promise<Campaign[]> {
+    try {
+      const allCampaigns = await this.getAllCampaigns();
+      return allCampaigns.filter(campaign => {
+        // Verifica se o usuário está na lista de operators da campanha
+        if (campaign.operator) {
+          const operatorIds = campaign.operator.split(',').map(id => id.trim());
+          return operatorIds.includes(userId.toString());
+        }
+        return false;
+      });
+    } catch (error) {
+      console.error('Erro ao buscar campanhas gerenciadas:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Busca todas as campanhas que um usuário pode acessar (criadas + gerenciadas)
+   * @param userId ID do usuário
+   * @returns Promise com campanhas acessíveis
+   */
+  async getUserAccessibleCampaigns(userId: string | number): Promise<Campaign[]> {
+    try {
+      const [createdCampaigns, managedCampaigns] = await Promise.all([
+        this.getCampaignsByUser(userId),
+        this.getManagedCampaigns(userId)
+      ]);
+
+      // Remove duplicatas
+      const allCampaigns = [...createdCampaigns, ...managedCampaigns];
+      const uniqueCampaigns = allCampaigns.filter((campaign, index, self) =>
+        index === self.findIndex(c => c.id === campaign.id)
+      );
+
+      console.log(`🎯 Campanhas acessíveis para usuário ${userId}:`, {
+        criadas: createdCampaigns.length,
+        gerenciadas: managedCampaigns.length,
+        total: uniqueCampaigns.length
+      });
+
+      return uniqueCampaigns;
+    } catch (error) {
+      console.error('Erro ao buscar campanhas acessíveis:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Busca campanhas de um usuário com suas redes completas usando a nova rota
+   * @param userId ID do usuário
    * @returns Promise com campanhas e suas redes
    */
   async getUserCampaignsWithNetworks(userId: string | number): Promise<FullCampaignNetwork[]> {
     try {
-      // Busca apenas as campanhas criadas pelo usuário
-      const userCampaigns = await this.getCampaignsByUser(userId);
+      // Busca apenas as campanhas que o usuário pode acessar
+      const accessibleCampaigns = await this.getUserAccessibleCampaigns(userId);
       const campaignsWithNetworks: FullCampaignNetwork[] = [];
 
-      console.log(`🔍 Buscando campanhas do usuário ${userId}:`, userCampaigns.length, 'encontradas');
+      console.log(`🔍 Buscando redes para ${accessibleCampaigns.length} campanhas acessíveis`);
 
-      // Para cada campanha do usuário, busca a rede FILTRADA por campanha
-      for (const campaign of userCampaigns) {
+      // Para cada campanha acessível, busca a rede usando a nova rota
+      for (const campaign of accessibleCampaigns) {
         try {
-          console.log(`🔄 Processando campanha: ${campaign.name} (ID: ${campaign.id}) criada por ${campaign.created_by}`);
-          
-          if (!campaign.created_by) {
-            console.warn(`Campanha ${campaign.name} não tem criador definido`);
-            continue;
+          console.log(`🔄 Processando campanha: ${campaign.name} (ID: ${campaign.id})`);
+
+          // Determina quem é o "root" da rede para esta campanha
+          let networkRootUserId: string | number;
+
+          // Se o usuário é o criador da campanha, usa ele mesmo como root
+          if (campaign.created_by.toString() === userId.toString()) {
+            networkRootUserId = userId;
+          } 
+          // Se o usuário é manager (operator), usa o criador da campanha como root
+          else if (campaign.operator && campaign.operator.split(',').map(id => id.trim()).includes(userId.toString())) {
+            networkRootUserId = campaign.created_by;
+          }
+          // Caso contrário, não deveria ter acesso (mas por segurança usa o criador)
+          else {
+            networkRootUserId = campaign.created_by;
           }
 
-          // TENTA PRIMEIRO: Busca a rede FILTRADA por campanha a partir do criador
-          let rootNetwork: NetworkUser;
-          try {
-            rootNetwork = await this.getNetworkTreeByCampaign(campaign.created_by, campaign.id.toString());
-            console.log(`✅ Rede filtrada encontrada para campanha ${campaign.name}`);
-          } catch (filterError) {
-            console.log(`🔄 Tentando método alternativo para campanha ${campaign.name}`);
-            // MÉTODO ALTERNATIVO: Constrói rede a partir dos usuários da campanha
-            rootNetwork = await this.buildNetworkFromCampaignUsers(campaign.id.toString(), campaign.created_by);
-            console.log(`✅ Rede construída para campanha ${campaign.name}`);
-          }
-          
+          console.log(`👑 Root da rede para campanha ${campaign.name}: ${networkRootUserId}`);
+
+          // Busca a rede FILTRADA por campanha usando a nova rota
+          const rootNetwork = await this.getNetworkTreeByCampaign(
+            campaign.id.toString(), 
+            networkRootUserId
+          );
+
+          console.log(`✅ Rede carregada para campanha ${campaign.name}: ${this.calculateNetworkStats(rootNetwork).totalMembers} membros`);
+
           const stats = this.calculateNetworkStats(rootNetwork);
 
           const campaignNetwork: FullCampaignNetwork = {
             rootNetwork,
-            userPosition: this.findUserInNetwork(rootNetwork, campaign.created_by),
+            userPosition: this.findUserInNetwork(rootNetwork, Number(userId)),
             campaign,
             campaignCreatorId: campaign.created_by,
             stats
           };
 
           campaignsWithNetworks.push(campaignNetwork);
-          console.log(`✅ Rede processada para campanha ${campaign.name}: ${stats.totalMembers} membros`);
           
         } catch (error) {
           console.warn(`⚠️ Erro ao processar campanha ${campaign.name}:`, error);
           
-          // Fallback: cria uma rede mínima com o criador
+          // Fallback: cria uma rede mínima
           try {
             const creatorData = await userService.getById(campaign.created_by.toString());
             const minimalNetwork: NetworkUser = {
               id: campaign.created_by,
               name: creatorData.name,
               email: creatorData.email,
-              role: creatorData.role as 'admin' | 'user',
+              role: creatorData.role as 'admin' | 'user' | 'manager',
               campaign_id: campaign.id.toString(),
               phone: creatorData.phone,
               invited_by: creatorData.invited_by ? Number(creatorData.invited_by) : null,
@@ -304,8 +268,9 @@ export const networkService = {
               stats: {
                 totalMembers: 1,
                 directInvites: 0,
-                adminCount: 1,
-                userCount: 0,
+                adminCount: creatorData.role === 'admin' ? 1 : 0,
+                userCount: creatorData.role === 'user' ? 1 : 0,
+                managerCount: creatorData.role === 'manager' ? 1 : 0,
                 networkDepth: 1
               }
             };
@@ -313,7 +278,7 @@ export const networkService = {
             campaignsWithNetworks.push(fallbackNetwork);
             console.log(`🔄 Fallback criado para campanha ${campaign.name}`);
           } catch {
-            // Fallback mais básico se não conseguir dados do criador
+            // Fallback mais básico
             const minimalNetwork: NetworkUser = {
               id: campaign.created_by,
               name: 'Criador da Campanha',
@@ -335,17 +300,17 @@ export const networkService = {
                 directInvites: 0,
                 adminCount: 1,
                 userCount: 0,
+                managerCount: 0,
                 networkDepth: 1
               }
             };
 
             campaignsWithNetworks.push(fallbackNetwork);
-            console.log(`🔄 Fallback básico criado para campanha ${campaign.name}`);
           }
         }
       }
 
-      console.log(`🎉 Total de campanhas do usuário processadas: ${campaignsWithNetworks.length}`);
+      console.log(`🎉 Total de campanhas processadas: ${campaignsWithNetworks.length}`);
       return campaignsWithNetworks;
     } catch (error) {
       console.error('Erro ao buscar campanhas do usuário com redes:', error);
@@ -354,52 +319,49 @@ export const networkService = {
   },
 
   /**
-   * Busca a rede completa da campanha desde o criador até o usuário atual
-   * @param userId ID do usuário atual
-   * @param userCampaignId ID da campanha do usuário
-   * @returns Promise com a rede completa da campanha
+   * Busca a rede completa da campanha usando a nova rota
    */
   async getFullCampaignNetwork(userId: string | number, userCampaignId: string | null): Promise<FullCampaignNetwork | null> {
     try {
-      // Busca todas as campanhas para encontrar o criador da campanha do usuário
-      const allCampaigns = await this.getAllCampaigns();
-      
-      // Encontra a campanha do usuário
-      const userCampaign = allCampaigns.find(campaign => 
-        campaign.id.toString() === userCampaignId?.toString()
-      );
+      if (!userCampaignId) {
+        return await this.getFallbackNetwork(userId, userCampaignId);
+      }
 
+      // Busca a campanha
+      const userCampaign = await this.getCampaignById(userCampaignId);
       if (!userCampaign) {
-        console.warn('Campanha do usuário não encontrada, usando rede do usuário');
+        console.warn('Campanha do usuário não encontrada');
         return await this.getFallbackNetwork(userId, userCampaignId);
       }
 
-      // O criador da campanha é o root da rede
-      const campaignCreatorId = userCampaign.created_by;
-      
-      if (!campaignCreatorId) {
-        console.warn('Criador da campanha não encontrado, usando rede do usuário');
-        return await this.getFallbackNetwork(userId, userCampaignId);
+      // Verifica se o usuário tem acesso a esta campanha
+      const accessibleCampaigns = await this.getUserAccessibleCampaigns(userId);
+      const hasAccess = accessibleCampaigns.some(campaign => campaign.id.toString() === userCampaignId);
+
+      if (!hasAccess) {
+        console.warn(`Usuário ${userId} não tem acesso à campanha ${userCampaignId}`);
+        return null;
       }
 
-      // Busca a rede completa a partir do criador da campanha
-      const rootNetwork = await this.getNetworkTree(campaignCreatorId);
+      // Determina o root da rede
+      let networkRootUserId: string | number;
+      if (userCampaign.created_by.toString() === userId.toString()) {
+        networkRootUserId = userId;
+      } else {
+        networkRootUserId = userCampaign.created_by;
+      }
 
-      // Verifica se o usuário atual está na rede do criador
+      // Busca a rede filtrada por campanha
+      const rootNetwork = await this.getNetworkTreeByCampaign(userCampaignId, networkRootUserId);
+
       const userPosition = this.findUserInNetwork(rootNetwork, Number(userId));
-
-      if (!userPosition) {
-        console.warn('Usuário não encontrado na rede do criador, usando rede do usuário');
-        return await this.getFallbackNetwork(userId, userCampaignId);
-      }
-
       const stats = this.calculateNetworkStats(rootNetwork);
 
       return {
         rootNetwork,
         userPosition,
         campaign: userCampaign,
-        campaignCreatorId,
+        campaignCreatorId: userCampaign.created_by,
         stats
       };
 
@@ -430,9 +392,7 @@ export const networkService = {
   },
 
   /**
-   * Busca rede de um usuário com informações da campanha (modo simples)
-   * @param userId ID do usuário
-   * @returns Promise com rede e informações da campanha
+   * Busca rede de um usuário com informações da campanha
    */
   async getNetworkWithCampaign(userId: string | number): Promise<NetworkWithCampaign> {
     const network = await this.getNetworkTree(userId);
@@ -456,45 +416,7 @@ export const networkService = {
   },
 
   /**
-   * Busca todas as redes com informações das campanhas (para admin)
-   * @returns Promise com redes e informações das campanhas
-   */
-  async getAllNetworksWithCampaigns(): Promise<NetworkWithCampaign[]> {
-    try {
-      const allNetworks = await this.getAllNetworks();
-  
-
-      const promises = allNetworks.map(async (network) => {
-        let campaign: Campaign | null = null;
-
-        if (network.campaign_id) {
-          try {
-            campaign = await campaignService.getById(network.campaign_id);
-          } catch (error) {
-            console.warn(`Campanha ${network.campaign_id} não encontrada:`, error);
-          }
-        }
-
-        const stats = this.calculateNetworkStats(network);
-
-        return {
-          network,
-          campaign,
-          stats
-        };
-      });
-
-      return await Promise.all(promises);
-    } catch (error) {
-      console.error('Erro ao buscar redes com campanhas:', error);
-      throw error;
-    }
-  },
-
-  /**
    * Calcula estatísticas da rede
-   * @param networkUser Usuário raiz da rede
-   * @returns Estatísticas da rede
    */
   calculateNetworkStats(networkUser: NetworkUser) {
     const countTotalMembers = (node: NetworkUser): number => {
@@ -517,20 +439,20 @@ export const networkService = {
     const directInvites = networkUser.children.length;
     const adminCount = countByRole(networkUser, 'admin');
     const userCount = countByRole(networkUser, 'user');
+    const managerCount = countByRole(networkUser, 'manager');
 
     return {
       totalMembers,
       directInvites,
       adminCount,
       userCount,
+      managerCount,
       networkDepth: this.calculateNetworkDepth(networkUser)
     };
   },
 
   /**
    * Calcula a profundidade máxima da rede
-   * @param node Nó raiz
-   * @returns Profundidade máxima
    */
   calculateNetworkDepth(node: NetworkUser): number {
     if (node.children.length === 0) {
@@ -548,9 +470,6 @@ export const networkService = {
 
   /**
    * Busca um usuário específico na rede
-   * @param networkUser Nó raiz da rede
-   * @param userId ID do usuário a ser encontrado
-   * @returns Usuário encontrado ou null
    */
   findUserInNetwork(networkUser: NetworkUser, userId: number): NetworkUser | null {
     if (networkUser.id === userId) {
@@ -569,9 +488,6 @@ export const networkService = {
 
   /**
    * Expande/retrai nós na árvore
-   * @param expandedNodes Conjunto de IDs expandidos
-   * @param nodeId ID do nó a ser toggleado
-   * @returns Novo conjunto de IDs expandidos
    */
   toggleNode(expandedNodes: Set<number>, nodeId: number): Set<number> {
     const newSet = new Set(expandedNodes);
@@ -585,9 +501,6 @@ export const networkService = {
 
   /**
    * Expande o caminho desde a raiz até o usuário atual
-   * @param rootNetwork Rede raiz
-   * @param userId ID do usuário atual
-   * @returns Conjunto com IDs expandidos no caminho
    */
   expandPathToUser(rootNetwork: NetworkUser, userId: number): Set<number> {
     const findPath = (node: NetworkUser, targetId: number): number[] => {
@@ -611,8 +524,6 @@ export const networkService = {
 
   /**
    * Expande todos os nós da árvore
-   * @param networkUser Nó raiz da rede
-   * @returns Conjunto com todos os IDs expandidos
    */
   expandAllNodes(networkUser: NetworkUser): Set<number> {
     const getAllIds = (node: NetworkUser): number[] => {
@@ -628,8 +539,6 @@ export const networkService = {
 
   /**
    * Retrai todos os nós exceto o raiz
-   * @param rootId ID do nó raiz
-   * @returns Conjunto apenas com o ID raiz
    */
   collapseAllNodes(rootId: number): Set<number> {
     return new Set([rootId]);

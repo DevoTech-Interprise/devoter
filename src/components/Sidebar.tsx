@@ -246,7 +246,7 @@ const Sidebar = () => {
       icon: <Home size={20} />,
       text: "Dashboard",
       path: "/dashboard",
-      roles: ["admin"]
+      roles: ["admin","manager"]
     },
     {
       type: 'item',
@@ -260,13 +260,13 @@ const Sidebar = () => {
       icon: <Send size={20} />,
       text: "Convites",
       path: "/convites",
-      roles: ["admin", "user"]
+      roles: ["admin", "user", "manager"]
     },
     {
       type: 'submenu',
       icon: <Users size={20} />,
       text: "Redes",
-      roles: ["admin", "user"],
+      roles: ["admin", "user", "manager"],
       items: [
         {
           icon: <Users size={16} />,
