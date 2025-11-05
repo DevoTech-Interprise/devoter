@@ -68,7 +68,7 @@ const Invites = () => {
     };
 
     window.addEventListener('campaignChanged', handleCampaignChange as EventListener);
-    
+
     return () => {
       window.removeEventListener('campaignChanged', handleCampaignChange as EventListener);
     };
@@ -220,8 +220,21 @@ const Invites = () => {
                 ))
               ) : (
                 <div className="p-6 text-center bg-white dark:bg-gray-800 rounded-xl shadow-lg">
-                  <p className="text-gray-600 dark:text-gray-400">Você ainda não criou nenhuma campanha.</p>
-                  <button onClick={() => window.location.href = '/campanhas'} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Criar Campanha</button>
+                 {user?.role != "admin" && (
+                    <p className="text-gray-600 dark:text-gray-400">
+                      Você ainda não está vinculado a nenhuma campanha. Entre em contato com o administrador para obter um convite.
+                    </p>
+                  )
+
+                 }
+                  {user?.role == "admin" && (
+                    <button
+                      onClick={() => (window.location.href = "/campanhas")}
+                      className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
+                      Criar Campanha
+                    </button>
+                  )}
                 </div>
               )}
             </div>

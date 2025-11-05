@@ -446,14 +446,15 @@ const NetworkPage = () => {
   const renderCampaignFilter = () => {
     if (accessibleCampaigns.length === 0) {
       return (
-        <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg">
-          <p className="text-yellow-800 dark:text-yellow-200">
-            {isAdmin 
-              ? 'Você não criou ou não gerencia nenhuma campanha.'
-              : 'Você não está associado a nenhuma campanha.'
-            }
-          </p>
-        </div>
+        <></>
+        // <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg">
+        //   <p className="text-yellow-800 dark:text-yellow-200">
+        //     {isAdmin 
+        //       ? 'Você não criou ou não gerencia nenhuma campanha.'
+        //       : 'Você não está associado a nenhuma campanha.'
+        //     }
+        //   </p>
+        // </div>
       );
     }
 

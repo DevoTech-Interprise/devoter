@@ -284,7 +284,7 @@ const Sidebar = () => {
     {
       type: 'item',
       icon: <Activity size={20} />,
-      text: "Alcançe & Engajamento",
+      text: "Alcançe",
       path: "/alcance-campanhas",
       roles: ["admin"]
     },
