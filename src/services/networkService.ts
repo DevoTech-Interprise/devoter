@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import api from './api';
 import { campaignService, type Campaign } from './campaignService';
+import { userService } from './userService';
 
 export interface NetworkUser {
   id: number;
@@ -55,7 +56,7 @@ export const networkService = {
    * @param userId ID do usuário
    * @returns Promise com a estrutura da rede
    */
-  async getNetworkTree(userId: string | number): Promise<NetworkUser> {
+  async getNetworkTree(userId: string | number | undefined): Promise<NetworkUser> {
     const response = await api.get<NetworkResponse>(`api/network/tree/${userId}`);
     return response.data.data;
   },
@@ -67,6 +68,123 @@ export const networkService = {
   async getAllNetworks(): Promise<NetworkUser[]> {
     const response = await api.get<AllNetworksResponse>('api/network/tree');
     return response.data.data;
+  },
+
+  /**
+   * Busca a árvore de rede de um usuário específico FILTRADA por campanha
+   * @param userId ID do usuário
+   * @param campaignId ID da campanha para filtrar
+   * @returns Promise com a estrutura da rede filtrada por campanha
+   */
+  async getNetworkTreeByCampaign(userId: string | number, campaignId: string): Promise<NetworkUser> {
+    try {
+      // Busca a rede completa do usuário
+      const fullNetwork = await this.getNetworkTree(userId);
+      
+      // Filtra a rede para incluir apenas usuários da campanha específica
+      const filterNetworkByCampaign = (node: NetworkUser): NetworkUser | null => {
+        // Se o nó atual não pertence à campanha, retorna null
+        if (node.campaign_id !== campaignId) {
+          return null;
+        }
+        
+        // Filtra os filhos recursivamente
+        const filteredChildren: NetworkUser[] = [];
+        node.children.forEach(child => {
+          const filteredChild = filterNetworkByCampaign(child);
+          if (filteredChild) {
+            filteredChildren.push(filteredChild);
+          }
+        });
+        
+        return {
+          ...node,
+          children: filteredChildren
+        };
+      };
+      
+      const filteredNetwork = filterNetworkByCampaign(fullNetwork);
+      
+      if (!filteredNetwork) {
+        // Se não encontrou rede filtrada, cria uma rede mínima com o criador
+        const userData = await userService.getById(userId.toString());
+        return {
+          id: Number(userId),
+          name: userData.name,
+          email: userData.email,
+          role: userData.role as 'admin' | 'user',
+          campaign_id: campaignId,
+          phone: userData.phone,
+          invited_by: userData.invited_by ? Number(userData.invited_by) : null,
+          children: []
+        };
+      }
+      
+      return filteredNetwork;
+    } catch (error) {
+      console.error(`Erro ao buscar rede filtrada por campanha ${campaignId}:`, error);
+      throw error;
+    }
+  },
+
+  /**
+   * Constrói rede a partir de todos os usuários de uma campanha
+   */
+  async buildNetworkFromCampaignUsers(campaignId: string, creatorId: string | number): Promise<NetworkUser> {
+    try {
+      // Busca todos os usuários
+      const allUsers = await userService.getAll();
+      
+      // Filtra usuários da campanha específica
+      const campaignUsers = allUsers.filter(user => user.campaign_id === campaignId);
+      
+      if (campaignUsers.length === 0) {
+        // Se não há usuários, retorna apenas o criador
+        const creatorData = await userService.getById(creatorId.toString());
+        return {
+          id: Number(creatorId),
+          name: creatorData.name,
+          email: creatorData.email,
+          role: creatorData.role as 'admin' | 'user',
+          campaign_id: campaignId,
+          phone: creatorData.phone,
+          invited_by: creatorData.invited_by ? Number(creatorData.invited_by) : null,
+          children: []
+        };
+      }
+
+      // Função para construir a árvore
+      const buildTree = (userId: string): NetworkUser => {
+        const user = campaignUsers.find(u => u.id === userId);
+        if (!user) {
+          throw new Error(`Usuário ${userId} não encontrado na campanha ${campaignId}`);
+        }
+
+        const children = campaignUsers.filter(u => u.invited_by === userId);
+        
+        return {
+          id: Number(user.id),
+          name: user.name,
+          email: user.email,
+          role: user.role as 'admin' | 'user',
+          campaign_id: campaignId,
+          phone: user.phone,
+          invited_by: user.invited_by ? Number(user.invited_by) : null,
+          children: children.map(child => buildTree(child.id))
+        };
+      };
+
+      // Encontra o criador da campanha
+      const creatorInCampaign = campaignUsers.find(user => user.id === creatorId.toString());
+      if (!creatorInCampaign) {
+        throw new Error(`Criador ${creatorId} não encontrado na campanha ${campaignId}`);
+      }
+
+      return buildTree(creatorId.toString());
+    } catch (error) {
+      console.error(`Erro ao construir rede da campanha ${campaignId}:`, error);
+      throw error;
+    }
   },
 
   /**
@@ -126,7 +244,7 @@ export const networkService = {
 
       console.log(`🔍 Buscando campanhas do usuário ${userId}:`, userCampaigns.length, 'encontradas');
 
-      // Para cada campanha do usuário, busca a rede completa desde o criador
+      // Para cada campanha do usuário, busca a rede FILTRADA por campanha
       for (const campaign of userCampaigns) {
         try {
           console.log(`🔄 Processando campanha: ${campaign.name} (ID: ${campaign.id}) criada por ${campaign.created_by}`);
@@ -136,8 +254,17 @@ export const networkService = {
             continue;
           }
 
-          // Busca a rede a partir do criador da campanha
-          const rootNetwork = await this.getNetworkTree(campaign.created_by);
+          // TENTA PRIMEIRO: Busca a rede FILTRADA por campanha a partir do criador
+          let rootNetwork: NetworkUser;
+          try {
+            rootNetwork = await this.getNetworkTreeByCampaign(campaign.created_by, campaign.id.toString());
+            console.log(`✅ Rede filtrada encontrada para campanha ${campaign.name}`);
+          } catch (filterError) {
+            console.log(`🔄 Tentando método alternativo para campanha ${campaign.name}`);
+            // MÉTODO ALTERNATIVO: Constrói rede a partir dos usuários da campanha
+            rootNetwork = await this.buildNetworkFromCampaignUsers(campaign.id.toString(), campaign.created_by);
+            console.log(`✅ Rede construída para campanha ${campaign.name}`);
+          }
           
           const stats = this.calculateNetworkStats(rootNetwork);
 
@@ -150,38 +277,71 @@ export const networkService = {
           };
 
           campaignsWithNetworks.push(campaignNetwork);
-          console.log(`✅ Rede encontrada para campanha ${campaign.name}: ${stats.totalMembers} membros`);
+          console.log(`✅ Rede processada para campanha ${campaign.name}: ${stats.totalMembers} membros`);
           
         } catch (error) {
           console.warn(`⚠️ Erro ao processar campanha ${campaign.name}:`, error);
           
           // Fallback: cria uma rede mínima com o criador
-          const minimalNetwork: NetworkUser = {
-            id: campaign.created_by,
-            name: 'Criador da Campanha',
-            email: '',
-            role: 'admin',
-            campaign_id: campaign.id.toString(),
-            phone: '',
-            invited_by: null,
-            children: []
-          };
+          try {
+            const creatorData = await userService.getById(campaign.created_by.toString());
+            const minimalNetwork: NetworkUser = {
+              id: campaign.created_by,
+              name: creatorData.name,
+              email: creatorData.email,
+              role: creatorData.role as 'admin' | 'user',
+              campaign_id: campaign.id.toString(),
+              phone: creatorData.phone,
+              invited_by: creatorData.invited_by ? Number(creatorData.invited_by) : null,
+              children: []
+            };
 
-          const fallbackNetwork: FullCampaignNetwork = {
-            rootNetwork: minimalNetwork,
-            userPosition: minimalNetwork,
-            campaign,
-            campaignCreatorId: campaign.created_by,
-            stats: {
-              totalMembers: 1,
-              directInvites: 0,
-              adminCount: 1,
-              userCount: 0,
-              networkDepth: 1
-            }
-          };
+            const fallbackNetwork: FullCampaignNetwork = {
+              rootNetwork: minimalNetwork,
+              userPosition: minimalNetwork,
+              campaign,
+              campaignCreatorId: campaign.created_by,
+              stats: {
+                totalMembers: 1,
+                directInvites: 0,
+                adminCount: 1,
+                userCount: 0,
+                networkDepth: 1
+              }
+            };
 
-          campaignsWithNetworks.push(fallbackNetwork);
+            campaignsWithNetworks.push(fallbackNetwork);
+            console.log(`🔄 Fallback criado para campanha ${campaign.name}`);
+          } catch {
+            // Fallback mais básico se não conseguir dados do criador
+            const minimalNetwork: NetworkUser = {
+              id: campaign.created_by,
+              name: 'Criador da Campanha',
+              email: '',
+              role: 'admin',
+              campaign_id: campaign.id.toString(),
+              phone: '',
+              invited_by: null,
+              children: []
+            };
+
+            const fallbackNetwork: FullCampaignNetwork = {
+              rootNetwork: minimalNetwork,
+              userPosition: minimalNetwork,
+              campaign,
+              campaignCreatorId: campaign.created_by,
+              stats: {
+                totalMembers: 1,
+                directInvites: 0,
+                adminCount: 1,
+                userCount: 0,
+                networkDepth: 1
+              }
+            };
+
+            campaignsWithNetworks.push(fallbackNetwork);
+            console.log(`🔄 Fallback básico criado para campanha ${campaign.name}`);
+          }
         }
       }
 
