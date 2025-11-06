@@ -349,7 +349,7 @@ const NetworkPage = () => {
             </div>
           )}
 
-          <div className={`flex-1 min-w-0 p-4 rounded-lg border-2 transition-all hover:shadow-md ${
+          <div className={`flex-1  min-w-0 p-4 rounded-lg border-2 transition-all hover:shadow-md ${
             isCurrentUser 
               ? 'border-blue-300 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-600' 
               : isCampaignCreator
@@ -360,10 +360,10 @@ const NetworkPage = () => {
           }`}>
             <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-col md:flex-row items-center gap-3 mb-2">
+                  <div className="flex flex-col justify-center md:flex-row items-center gap-2">
                     {getRoleIcon(node.role)}
-                    <h3 className={`font-semibold truncate ${
+                    <h3 className={`text-wrap text-center font-semibold truncate ${
                       isCurrentUser 
                         ? 'text-blue-700 dark:text-blue-300' 
                         : isCampaignCreator
@@ -373,7 +373,9 @@ const NetworkPage = () => {
                         : 'text-gray-900 dark:text-white'
                     }`}>
                       {userName}
-                      {isCurrentUser && (
+                      
+                    </h3>
+                    {isCurrentUser && (
                         <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
                           Você
                         </span>
@@ -383,7 +385,6 @@ const NetworkPage = () => {
                           Criador
                         </span>
                       )}
-                    </h3>
                   </div>
                   <span className={`text-xs px-2 py-1 rounded-full border ${getRoleColor(node.role)}`}>
                     {node.role === 'admin' ? 'Administrador' : 
@@ -391,21 +392,21 @@ const NetworkPage = () => {
                   </span>
                 </div>
                 
-                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 mb-2">
+                <div className="flex flex-col md:flex-row items-center gap-2 text-sm text-gray-600 dark:text-gray-300 mb-2">
                   <Mail className="w-4 h-4" />
-                  <span className="truncate">{userEmail}</span>
+                  <span className="text-wrap">{userEmail}</span>
                 </div>
 
                 {userPhone && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 mb-2">
-                    <span className="truncate">📱 {userPhone}</span>
+                  <div className="flex flex-col md:flex-row items-center gap-2 text-sm text-gray-600 dark:text-gray-300 mb-2">
+                    <span className=""><div className='text-center'>📱</div> {userPhone}</span>
                   </div>
                 )}
 
                 {userCampaign && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 mb-2">
+                  <div className="flex flex-col md:flex-row items-center gap-2 text-sm text-gray-600 dark:text-gray-300 mb-2">
                     <Building2 className="w-4 h-4" />
-                    <span className="truncate">
+                    <span className="text-center">
                       Campanha: {userCampaign.name}
                     </span>
                   </div>
@@ -489,7 +490,7 @@ const NetworkPage = () => {
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setSelectedCampaign('all')}
-            className={`px-4 py-2 rounded-lg border transition-all ${
+            className={`w-full md:w-auto px-4 py-2 rounded-lg border transition-all ${
               selectedCampaign === 'all'
                 ? 'bg-blue-100 border-blue-400 text-blue-800 dark:bg-blue-900/40 dark:border-blue-500 dark:text-blue-200 shadow-md'
                 : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700'
@@ -502,16 +503,16 @@ const NetworkPage = () => {
             <button
               key={campaign.id}
               onClick={() => setSelectedCampaign(campaign.id.toString())}
-              className={`px-4 py-2 rounded-lg border transition-all ${
+              className={`w-full md:w-auto px-4 py-2 rounded-lg border transition-all ${
                 selectedCampaign === campaign.id.toString()
                   ? 'bg-blue-100 border-blue-400 text-blue-800 dark:bg-blue-900/40 dark:border-blue-500 dark:text-blue-200 shadow-md'
                   : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700'
               }`}
             >
               {campaign.name}
-              {campaign.created_by?.toString() === user?.id && (
+              {/* {campaign.created_by?.toString() === user?.id && (
                 <span className="ml-1 text-xs bg-green-100 text-green-800 px-1 rounded">Criador</span>
-              )}
+              )} */}
               {campaign.operator && campaign.operator.split(',').map(id => id.trim()).includes(user?.id || '') && 
                campaign.created_by?.toString() !== user?.id && (
                 <span className="ml-1 text-xs bg-purple-100 text-purple-800 px-1 rounded">Manager</span>
@@ -668,8 +669,8 @@ const NetworkPage = () => {
               )}
             </section>
 
-            <div className="mt-6 flex flex-wrap gap-6 text-sm text-gray-600 dark:text-gray-400">
-              <div className="flex items-center gap-2">
+            <div className="mt-6 flex flex-col md:flex-row gap-6 text-sm text-gray-600 dark:text-gray-400">
+              <div className="flex justify-center items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-blue-500"></div>
                 <span>Você (Usuário atual)</span>
               </div>

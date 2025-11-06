@@ -436,33 +436,33 @@ const CampaignNetworksPage = () => {
                         : 'border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-600'
                         }`}>
                         <div className="flex items-start justify-between">
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-3 mb-2 flex-wrap">
-                                    <div className="flex items-center gap-2">
+                            <div className="flex-1  min-w-0">
+                                <div className="flex justify-center md:justify-start  items-center gap-3 mb-2 flex-wrap">
+                                    <div className="flex flex-col md:flex-row items-center gap-2">
                                         {getRoleIcon(node.role)}
-                                        <h3 className="font-semibold truncate text-gray-900 dark:text-white">
+                                        <h3 className=" font-semibold text-wrap text-center  text-gray-900 dark:text-white">
                                             {node.name}
                                         </h3>
                                     </div>
-                                    <div className="flex gap-2 flex-wrap">
-                                        <span className={`text-xs px-2 py-1 rounded-full border ${getRoleColor(node.role)}`}>
+                                    <div className="flex flex-col md:flex-row justify-center gap-2 flex-wrap">
+                                        <span className={`text-xs text-center px-2 py-1 rounded-full border ${getRoleColor(node.role)}`}>
                                             {node.role === 'admin' ? 'Administrador' : 
                                              node.role === 'manager' ? 'Manager' : 'Usuário'}
                                         </span>
-                                        <span className={`text-xs px-2 py-1 rounded-full border ${getClassBadgeColor(node.networkClass)} ${isTargetClass ? 'ring-2 ring-red-500' : ''
+                                        <span className={`text-xs text-center px-2 py-1 rounded-full border ${getClassBadgeColor(node.networkClass)} ${isTargetClass ? 'ring-2 ring-red-500' : ''
                                             }`}>
                                             Classe {node.networkClass}
                                         </span>
                                     </div>
                                 </div>
 
-                                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 mb-2">
+                                <div className="flex flex-col md:flex-row items-center gap-2 text-sm text-gray-600 dark:text-gray-300 mb-2">
                                     <Mail className="w-4 h-4" />
                                     <span className="truncate">{node.email}</span>
                                 </div>
 
                                 {hasChildren && (
-                                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                                    <div className="flex justify-center md:justify-start items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                                         <Users className="w-3 h-3" />
                                         <span>{node.children.length} convite(s) direto(s)</span>
                                     </div>

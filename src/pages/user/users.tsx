@@ -415,7 +415,7 @@ const UserManagement = () => {
                     />
                   </div>
                 </div>
-                <div className="flex gap-4">
+                <div className="flex gap-4 flex-col md:flex-row">
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value as any)}
@@ -432,7 +432,7 @@ const UserManagement = () => {
                   <select
                     value={roleFilter}
                     onChange={(e) => setRoleFilter(e.target.value as any)}
-                    className={`px-3 py-2 rounded-lg border transition-colors ${
+                    className={`px-3 py-2 rounded-lg  border transition-colors ${
                       darkMode 
                         ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
                         : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
