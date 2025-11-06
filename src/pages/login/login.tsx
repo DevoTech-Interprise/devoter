@@ -67,7 +67,7 @@ const Login: React.FC = () => {
 
       // Salvar token primeiro
       localStorage.setItem("token", response.access_token);
-      
+
       // Usar o UserContext para setar o usuário (isso vai atualizar o localStorage também)
       setUser(userData);
 
@@ -94,7 +94,7 @@ const Login: React.FC = () => {
       }
 
       setError("root", { type: "manual", message: errorMessage });
-      
+
       // Limpar dados em caso de erro
       localStorage.removeItem("token");
       localStorage.removeItem("user");
@@ -106,14 +106,12 @@ const Login: React.FC = () => {
 
   return (
     <div
-      className={`min-h-screen flex items-center justify-center p-4 transition-colors duration-300 ${
-        darkMode ? "bg-gray-900 text-gray-100" : "bg-gray-100 text-gray-900"
-      }`}
+      className={`min-h-screen flex items-center justify-center p-4 transition-colors duration-300 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-gray-100 text-gray-900"
+        }`}
     >
       <div
-        className={`w-full max-w-md rounded-2xl shadow-lg overflow-hidden ${
-          darkMode ? "bg-gray-800" : "bg-white"
-        }`}
+        className={`w-full max-w-md rounded-2xl shadow-lg overflow-hidden ${darkMode ? "bg-gray-800" : "bg-white"
+          }`}
       >
         {/* HEADER */}
         <div
@@ -141,11 +139,10 @@ const Login: React.FC = () => {
                 setLoginType("email");
                 setValue("phone", "");
               }}
-              className={`px-3 py-1 rounded-full text-sm font-medium ${
-                loginType === "email"
+              className={`px-3 py-1 rounded-full text-sm font-medium ${loginType === "email"
                   ? "bg-blue-500 text-white"
                   : "bg-gray-200 dark:bg-gray-700 dark:text-gray-300"
-              }`}
+                }`}
             >
               Email
             </button>
@@ -155,11 +152,10 @@ const Login: React.FC = () => {
                 setLoginType("phone");
                 setValue("email", "");
               }}
-              className={`px-3 py-1 rounded-full text-sm font-medium ${
-                loginType === "phone"
+              className={`px-3 py-1 rounded-full text-sm font-medium ${loginType === "phone"
                   ? "bg-blue-500 text-white"
                   : "bg-gray-200 dark:bg-gray-700 dark:text-gray-300"
-              }`}
+                }`}
             >
               Telefone
             </button>
@@ -183,11 +179,10 @@ const Login: React.FC = () => {
                   type="email"
                   placeholder="you@example.com"
                   {...register("email")}
-                  className={`w-full pl-10 pr-3 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent ${
-                    darkMode
+                  className={`w-full pl-10 pr-3 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent ${darkMode
                       ? "bg-gray-700 border-gray-600 text-white focus:ring-blue-400"
                       : "bg-white border-gray-300 text-gray-700 focus:ring-primary-500"
-                  }`}
+                    }`}
                 />
               </div>
               {errors.email && (
@@ -256,11 +251,10 @@ const Login: React.FC = () => {
                 type={showPassword ? "text" : "password"}
                 placeholder="••••••••"
                 {...register("password")}
-                className={`w-full pl-10 pr-10 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent ${
-                  darkMode
+                className={`w-full pl-10 pr-10 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent ${darkMode
                     ? "bg-gray-700 border-gray-600 text-white focus:ring-blue-400"
                     : "bg-white border-gray-300 text-gray-700 focus:ring-primary-500"
-                }`}
+                  }`}
               />
               <button
                 type="button"
@@ -307,7 +301,7 @@ const Login: React.FC = () => {
           <div className="text-center space-y-2">
             <button
               type="button"
-              onClick={() => navigate("/forgot-password")}
+              onClick={() => navigate("/esqueci-a-senha")} 
               className="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
             >
               Esqueceu sua senha?

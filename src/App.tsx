@@ -1,4 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import PrivateRoute from "./routes/PrivateRoutes";
 import { ThemeProvider } from "./context/ThemeContext";
 import { UserProvider } from "./context/UserContext";
@@ -14,6 +16,7 @@ import CampaignNetworksPage from "./pages/networks/campaignNetworks";
 import AlcancePage from "./pages/range/range";
 import UserManagement from "./pages/user/users";
 import UserProfile from "./pages/profile/UserProfile";
+import ForgotPassword from "./pages/forgotPassword.tsx/ForgotPassword";
 
 const RootRedirect = () => {
   const token = localStorage.getItem("token");
@@ -33,10 +36,25 @@ function App() {
     <ThemeProvider>
       <UserProvider>
         <Router>
+          {/* ToastContainer ADICIONADO AQUI - É OBRIGATÓRIO */}
+          <ToastContainer
+            position="top-right"
+            autoClose={5000}
+            hideProgressBar={false}
+            newestOnTop={false}
+            closeOnClick
+            rtl={false}
+            pauseOnFocusLoss
+            draggable
+            pauseOnHover
+            theme="colored"
+          />
+          
           <Routes>
             {/* Páginas públicas */}
             <Route path="/" element={<RootRedirect />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/esqueci-a-senha" element={<ForgotPassword />} />
 
             {/* Páginas privadas */}
             <Route
