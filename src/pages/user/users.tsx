@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { 
-  Users, 
-  Search, 
-  Edit, 
-  Trash2, 
+import {
+  Users,
+  Search,
+  Edit,
+  Trash2,
   UserPlus,
   Eye,
   Mail,
@@ -13,7 +13,8 @@ import {
   Shield,
   CheckCircle,
   XCircle,
-  Key
+  Key,
+  Filter
 } from "lucide-react";
 import Sidebar from "../../components/Sidebar";
 import Header from "../../components/Header";
@@ -21,9 +22,11 @@ import { useTheme } from "../../context/ThemeContext";
 import { userService, type User } from '../../services/userService';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { useUser } from '../../context/UserContext';
 
 const UserManagement = () => {
   const { darkMode } = useTheme();
+  const { user: currentUser } = useUser();
   const [users, setUsers] = useState<User[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,18 +56,51 @@ const UserManagement = () => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
-    loadUsers();
-  }, []);
+    if (currentUser?.id) {
+      loadUsers();
+    }
+  }, [currentUser]);
 
   useEffect(() => {
     filterUsers();
   }, [users, searchTerm, statusFilter, roleFilter]);
 
-  const loadUsers = async () => {
+  // No componente UserManagement, modifique o loadUsers:
+const loadUsers = async () => {
     try {
       setLoading(true);
-      const usersData = await userService.getAll();
-      setUsers(usersData);
+
+      // Se o usuário atual é super, carrega todos os usuários
+      if (currentUser?.role === 'super') {
+        console.log('👑 Usuário SUPER: carregando todos os usuários');
+        const allUsers = await userService.getAll();
+        setUsers(allUsers);
+        return;
+      }
+
+      // Se o usuário atual é admin, verifica se ele tem campanhas
+      if (currentUser?.role === 'admin') {
+        // Primeiro verifica se o admin tem campanhas próprias
+        const myCampaignUsers = await userService.getManageableUsers(currentUser?.id);
+
+        if (myCampaignUsers.length > 0) {
+          // Admin com campanhas: mostra apenas usuários das suas campanhas
+          console.log('👑 Admin com campanhas: carregando usuários das minhas campanhas');
+          setUsers(myCampaignUsers);
+        } else {
+          // Admin sem campanhas: mostra apenas o próprio usuário
+          console.log('👑 Admin sem campanhas: carregando apenas próprio usuário');
+          const allUsers = await userService.getAll();
+          const currentUserOnly = allUsers.filter(user => String(user.id) === String(currentUser?.id));
+          setUsers(currentUserOnly);
+        }
+      } else {
+        // Usuário não-admin: carrega apenas usuários das suas campanhas
+        const usersData = await userService.getManageableUsers(currentUser?.id);
+        console.log('👤 Usuário não-admin: carregando usuários das minhas campanhas');
+        setUsers(usersData);
+      }
+
     } catch (error) {
       console.error('Erro ao carregar usuários:', error);
       toast.error('Erro ao carregar usuários');
@@ -72,7 +108,6 @@ const UserManagement = () => {
       setLoading(false);
     }
   };
-
   const filterUsers = () => {
     let filtered = users;
 
@@ -87,7 +122,7 @@ const UserManagement = () => {
 
     // Filtro de status
     if (statusFilter !== 'all') {
-      filtered = filtered.filter(user => 
+      filtered = filtered.filter(user =>
         statusFilter === 'active' ? user.is_active === "1" : user.is_active !== "1"
       );
     }
@@ -201,7 +236,7 @@ const UserManagement = () => {
 
     try {
       setActionLoading('create');
-      
+
       const userData = {
         name: createForm.name,
         email: createForm.email,
@@ -255,11 +290,10 @@ const UserManagement = () => {
   const getStatusBadge = (isActive: string) => {
     const isActiveBool = isActive === "1";
     return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-        isActiveBool
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isActiveBool
           ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
           : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
-      }`}>
+        }`}>
         {isActiveBool ? (
           <>
             <CheckCircle className="w-3 h-3 mr-1" />
@@ -277,6 +311,7 @@ const UserManagement = () => {
 
   const getRoleBadge = (role: string) => {
     const roleConfig = {
+      super: { color: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300', icon: Shield, label: 'Super' },
       admin: { color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300', icon: Shield, label: 'Admin' },
       manager: { color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300', icon: Users, label: 'Manager' },
       user: { color: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300', icon: Users, label: 'Usuário' }
@@ -337,10 +372,13 @@ const UserManagement = () => {
                 <div>
                   <h1 className="text-2xl font-bold">Gerenciamento de Usuários</h1>
                   <p className={`mt-1 ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
-                    Gerencie todos os usuários do sistema
+                    {currentUser?.role === 'admin'
+                      ? 'Gerencie todos os usuários do sistema'
+                      : 'Gerencie usuários das suas campanhas'
+                    }
                   </p>
                 </div>
-                <button 
+                <button
                   onClick={handleCreate}
                   className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center transition-colors"
                 >
@@ -351,7 +389,7 @@ const UserManagement = () => {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-6">
               <div className={`rounded-lg p-4 ${darkMode ? "bg-gray-900" : "bg-white"} shadow`}>
                 <div className="flex items-center">
                   <Users className={`w-8 h-8 ${darkMode ? "text-blue-400" : "text-blue-500"}`} />
@@ -394,6 +432,17 @@ const UserManagement = () => {
                   </div>
                 </div>
               </div>
+              <div className={`rounded-lg p-4 ${darkMode ? "bg-gray-900" : "bg-white"} shadow`}>
+                <div className="flex items-center">
+                  <Filter className={`w-8 h-8 ${darkMode ? "text-yellow-400" : "text-yellow-500"}`} />
+                  <div className="ml-4">
+                    <p className={`text-sm ${darkMode ? "text-gray-400" : "text-gray-500"}`}>Visualização</p>
+                    <p className="text-sm font-bold">
+                      {currentUser?.role === 'admin' ? 'Todos' : 'Minhas Campanhas'}
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Filters */}
@@ -407,11 +456,10 @@ const UserManagement = () => {
                       placeholder="Buscar por nome, email ou telefone..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className={`w-full pl-10 pr-4 py-2 rounded-lg border transition-colors ${
-                        darkMode 
-                          ? "bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-blue-500" 
+                      className={`w-full pl-10 pr-4 py-2 rounded-lg border transition-colors ${darkMode
+                          ? "bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-blue-500"
                           : "bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:border-blue-500"
-                      }`}
+                        }`}
                     />
                   </div>
                 </div>
@@ -419,11 +467,10 @@ const UserManagement = () => {
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value as any)}
-                    className={`px-3 py-2 rounded-lg border transition-colors ${
-                      darkMode 
-                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                    className={`px-3 py-2 rounded-lg border transition-colors ${darkMode
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
                         : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
-                    }`}
+                      }`}
                   >
                     <option value="all">Todos os status</option>
                     <option value="active">Ativos</option>
@@ -432,11 +479,10 @@ const UserManagement = () => {
                   <select
                     value={roleFilter}
                     onChange={(e) => setRoleFilter(e.target.value as any)}
-                    className={`px-3 py-2 rounded-lg  border transition-colors ${
-                      darkMode 
-                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                    className={`px-3 py-2 rounded-lg  border transition-colors ${darkMode
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
                         : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
-                    }`}
+                      }`}
                   >
                     <option value="all">Todos os cargos</option>
                     <option value="admin">Administradores</option>
@@ -478,13 +524,12 @@ const UserManagement = () => {
                       <tr key={user.id} className={darkMode ? "hover:bg-gray-800" : "hover:bg-gray-50"}>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-medium ${
-                              user.role === 'admin' 
-                                ? 'bg-blue-500 text-white' 
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-medium ${user.role === 'admin'
+                                ? 'bg-blue-500 text-white'
                                 : user.role === 'manager'
-                                ? 'bg-purple-500 text-white'
-                                : 'bg-gray-400 text-white'
-                            }`}>
+                                  ? 'bg-purple-500 text-white'
+                                  : 'bg-gray-400 text-white'
+                              }`}>
                               {user.name.charAt(0).toUpperCase()}
                             </div>
                             <div className="ml-4">
@@ -514,33 +559,30 @@ const UserManagement = () => {
                           <div className="flex justify-end space-x-2">
                             <button
                               onClick={() => handleView(user)}
-                              className={`p-2 rounded-lg transition-colors ${
-                                darkMode 
-                                  ? "text-blue-400 hover:bg-gray-800" 
+                              className={`p-2 rounded-lg transition-colors ${darkMode
+                                  ? "text-blue-400 hover:bg-gray-800"
                                   : "text-blue-600 hover:bg-gray-100"
-                              }`}
+                                }`}
                               title="Visualizar"
                             >
                               <Eye className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleEdit(user)}
-                              className={`p-2 rounded-lg transition-colors ${
-                                darkMode 
-                                  ? "text-green-400 hover:bg-gray-800" 
+                              className={`p-2 rounded-lg transition-colors ${darkMode
+                                  ? "text-green-400 hover:bg-gray-800"
                                   : "text-green-600 hover:bg-gray-100"
-                              }`}
+                                }`}
                               title="Editar"
                             >
                               <Edit className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleDelete(user)}
-                              className={`p-2 rounded-lg transition-colors ${
-                                darkMode 
-                                  ? "text-red-400 hover:bg-gray-800" 
+                              className={`p-2 rounded-lg transition-colors ${darkMode
+                                  ? "text-red-400 hover:bg-gray-800"
                                   : "text-red-600 hover:bg-gray-100"
-                              }`}
+                                }`}
                               title="Excluir"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -569,17 +611,15 @@ const UserManagement = () => {
       {/* Create Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className={`rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto ${
-            darkMode ? "bg-gray-900" : "bg-white"
-          }`}>
+          <div className={`rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto ${darkMode ? "bg-gray-900" : "bg-white"
+            }`}>
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-semibold">Criar Novo Usuário</h3>
                 <button
                   onClick={() => setShowCreateModal(false)}
-                  className={`p-1 rounded-lg ${
-                    darkMode ? "hover:bg-gray-800" : "hover:bg-gray-100"
-                  }`}
+                  className={`p-1 rounded-lg ${darkMode ? "hover:bg-gray-800" : "hover:bg-gray-100"
+                    }`}
                 >
                   <XCircle className="w-5 h-5" />
                 </button>
@@ -593,12 +633,11 @@ const UserManagement = () => {
                   <input
                     type="text"
                     value={createForm.name}
-                    onChange={(e) => setCreateForm({...createForm, name: e.target.value})}
-                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
-                      darkMode 
-                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                    onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
                         : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
-                    }`}
+                      }`}
                     placeholder="Digite o nome completo"
                   />
                 </div>
@@ -610,12 +649,11 @@ const UserManagement = () => {
                   <input
                     type="email"
                     value={createForm.email}
-                    onChange={(e) => setCreateForm({...createForm, email: e.target.value})}
-                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
-                      darkMode 
-                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                    onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
                         : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
-                    }`}
+                      }`}
                     placeholder="Digite o email"
                   />
                 </div>
@@ -625,12 +663,11 @@ const UserManagement = () => {
                   <input
                     type="text"
                     value={createForm.phone}
-                    onChange={(e) => setCreateForm({...createForm, phone: e.target.value})}
-                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
-                      darkMode 
-                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                    onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
                         : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
-                    }`}
+                      }`}
                     placeholder="Digite o telefone"
                   />
                 </div>
@@ -639,12 +676,11 @@ const UserManagement = () => {
                   <label className="block text-sm font-medium mb-2">Gênero</label>
                   <select
                     value={createForm.gender}
-                    onChange={(e) => setCreateForm({...createForm, gender: e.target.value})}
-                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
-                      darkMode 
-                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                    onChange={(e) => setCreateForm({ ...createForm, gender: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
                         : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
-                    }`}
+                      }`}
                   >
                     <option value="">Selecione</option>
                     <option value="male">Masculino</option>
@@ -661,17 +697,15 @@ const UserManagement = () => {
                     <input
                       type="password"
                       value={createForm.password}
-                      onChange={(e) => setCreateForm({...createForm, password: e.target.value})}
-                      className={`w-full px-3 py-2 rounded-lg border transition-colors ${
-                        darkMode 
-                          ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                      onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                      className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
+                          ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
                           : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
-                      }`}
+                        }`}
                       placeholder="Digite a senha"
                     />
-                    <Key className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${
-                      darkMode ? "text-gray-400" : "text-gray-500"
-                    }`} />
+                    <Key className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${darkMode ? "text-gray-400" : "text-gray-500"
+                      }`} />
                   </div>
                 </div>
 
@@ -683,17 +717,15 @@ const UserManagement = () => {
                     <input
                       type="password"
                       value={createForm.confirmPassword}
-                      onChange={(e) => setCreateForm({...createForm, confirmPassword: e.target.value})}
-                      className={`w-full px-3 py-2 rounded-lg border transition-colors ${
-                        darkMode 
-                          ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                      onChange={(e) => setCreateForm({ ...createForm, confirmPassword: e.target.value })}
+                      className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
+                          ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
                           : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
-                      }`}
+                        }`}
                       placeholder="Confirme a senha"
                     />
-                    <Key className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${
-                      darkMode ? "text-gray-400" : "text-gray-500"
-                    }`} />
+                    <Key className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${darkMode ? "text-gray-400" : "text-gray-500"
+                      }`} />
                   </div>
                 </div>
 
@@ -701,12 +733,11 @@ const UserManagement = () => {
                   <label className="block text-sm font-medium mb-2">Cargo</label>
                   <select
                     value={createForm.role}
-                    onChange={(e) => setCreateForm({...createForm, role: e.target.value})}
-                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
-                      darkMode 
-                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                    onChange={(e) => setCreateForm({ ...createForm, role: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
                         : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
-                    }`}
+                      }`}
                   >
                     <option value="user">Usuário</option>
                     <option value="manager">Manager</option>
@@ -718,12 +749,11 @@ const UserManagement = () => {
                   <label className="block text-sm font-medium mb-2">Status</label>
                   <select
                     value={createForm.is_active}
-                    onChange={(e) => setCreateForm({...createForm, is_active: e.target.value})}
-                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
-                      darkMode 
-                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                    onChange={(e) => setCreateForm({ ...createForm, is_active: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
                         : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
-                    }`}
+                      }`}
                   >
                     <option value="1">Ativo</option>
                     <option value="0">Inativo</option>
@@ -735,12 +765,11 @@ const UserManagement = () => {
                   <input
                     type="text"
                     value={createForm.country}
-                    onChange={(e) => setCreateForm({...createForm, country: e.target.value})}
-                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
-                      darkMode 
-                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                    onChange={(e) => setCreateForm({ ...createForm, country: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
                         : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
-                    }`}
+                      }`}
                     placeholder="Digite o país"
                   />
                 </div>
@@ -750,12 +779,11 @@ const UserManagement = () => {
                   <input
                     type="text"
                     value={createForm.state}
-                    onChange={(e) => setCreateForm({...createForm, state: e.target.value})}
-                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
-                      darkMode 
-                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                    onChange={(e) => setCreateForm({ ...createForm, state: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
                         : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
-                    }`}
+                      }`}
                     placeholder="Digite o estado"
                   />
                 </div>
@@ -765,12 +793,11 @@ const UserManagement = () => {
                   <input
                     type="text"
                     value={createForm.city}
-                    onChange={(e) => setCreateForm({...createForm, city: e.target.value})}
-                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
-                      darkMode 
-                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                    onChange={(e) => setCreateForm({ ...createForm, city: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
                         : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
-                    }`}
+                      }`}
                     placeholder="Digite a cidade"
                   />
                 </div>
@@ -780,12 +807,11 @@ const UserManagement = () => {
                   <input
                     type="text"
                     value={createForm.neighborhood}
-                    onChange={(e) => setCreateForm({...createForm, neighborhood: e.target.value})}
-                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
-                      darkMode 
-                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                    onChange={(e) => setCreateForm({ ...createForm, neighborhood: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
                         : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
-                    }`}
+                      }`}
                     placeholder="Digite o bairro"
                   />
                 </div>
@@ -794,11 +820,10 @@ const UserManagement = () => {
               <div className="flex justify-end space-x-3 pt-6 mt-6 border-t border-gray-200 dark:border-gray-700">
                 <button
                   onClick={() => setShowCreateModal(false)}
-                  className={`px-4 py-2 rounded-lg border transition-colors ${
-                    darkMode 
-                      ? "border-gray-600 text-gray-300 hover:bg-gray-800" 
+                  className={`px-4 py-2 rounded-lg border transition-colors ${darkMode
+                      ? "border-gray-600 text-gray-300 hover:bg-gray-800"
                       : "border-gray-300 text-gray-700 hover:bg-gray-100"
-                  }`}
+                    }`}
                 >
                   Cancelar
                 </button>
@@ -819,17 +844,15 @@ const UserManagement = () => {
       {/* View Modal */}
       {showViewModal && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className={`rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto ${
-            darkMode ? "bg-gray-900" : "bg-white"
-          }`}>
+          <div className={`rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto ${darkMode ? "bg-gray-900" : "bg-white"
+            }`}>
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-semibold">Detalhes do Usuário</h3>
                 <button
                   onClick={() => setShowViewModal(false)}
-                  className={`p-1 rounded-lg ${
-                    darkMode ? "hover:bg-gray-800" : "hover:bg-gray-100"
-                  }`}
+                  className={`p-1 rounded-lg ${darkMode ? "hover:bg-gray-800" : "hover:bg-gray-100"
+                    }`}
                 >
                   <XCircle className="w-5 h-5" />
                 </button>
@@ -837,13 +860,12 @@ const UserManagement = () => {
 
               <div className="space-y-4">
                 <div className="flex items-center space-x-4">
-                  <div className={`w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold ${
-                    selectedUser.role === 'admin' 
-                      ? 'bg-blue-500 text-white' 
+                  <div className={`w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold ${selectedUser.role === 'admin'
+                      ? 'bg-blue-500 text-white'
                       : selectedUser.role === 'manager'
-                      ? 'bg-purple-500 text-white'
-                      : 'bg-gray-400 text-white'
-                  }`}>
+                        ? 'bg-purple-500 text-white'
+                        : 'bg-gray-400 text-white'
+                    }`}>
                     {selectedUser.name.charAt(0).toUpperCase()}
                   </div>
                   <div>
@@ -893,17 +915,15 @@ const UserManagement = () => {
       {/* Edit Modal */}
       {showEditModal && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className={`rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto ${
-            darkMode ? "bg-gray-900" : "bg-white"
-          }`}>
+          <div className={`rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto ${darkMode ? "bg-gray-900" : "bg-white"
+            }`}>
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-semibold">Editar Usuário</h3>
                 <button
                   onClick={() => setShowEditModal(false)}
-                  className={`p-1 rounded-lg ${
-                    darkMode ? "hover:bg-gray-800" : "hover:bg-gray-100"
-                  }`}
+                  className={`p-1 rounded-lg ${darkMode ? "hover:bg-gray-800" : "hover:bg-gray-100"
+                    }`}
                 >
                   <XCircle className="w-5 h-5" />
                 </button>
@@ -915,12 +935,11 @@ const UserManagement = () => {
                   <input
                     type="text"
                     value={editForm.name || ''}
-                    onChange={(e) => setEditForm({...editForm, name: e.target.value})}
-                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
-                      darkMode 
-                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
                         : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
-                    }`}
+                      }`}
                   />
                 </div>
 
@@ -929,12 +948,11 @@ const UserManagement = () => {
                   <input
                     type="email"
                     value={editForm.email || ''}
-                    onChange={(e) => setEditForm({...editForm, email: e.target.value})}
-                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
-                      darkMode 
-                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
                         : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
-                    }`}
+                      }`}
                   />
                 </div>
 
@@ -943,12 +961,11 @@ const UserManagement = () => {
                   <input
                     type="text"
                     value={editForm.phone || ''}
-                    onChange={(e) => setEditForm({...editForm, phone: e.target.value})}
-                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${
-                      darkMode 
-                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
                         : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
-                    }`}
+                      }`}
                   />
                 </div>
 
@@ -957,12 +974,11 @@ const UserManagement = () => {
                     <label className="block text-sm font-medium mb-2">Cargo</label>
                     <select
                       value={editForm.role || ''}
-                      onChange={(e) => setEditForm({...editForm, role: e.target.value})}
-                      className={`w-full px-3 py-2 rounded-lg border transition-colors ${
-                        darkMode 
-                          ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                      onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                      className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
+                          ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
                           : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
-                      }`}
+                        }`}
                     >
                       <option value="user">Usuário</option>
                       <option value="manager">Manager</option>
@@ -973,12 +989,11 @@ const UserManagement = () => {
                     <label className="block text-sm font-medium mb-2">Status</label>
                     <select
                       value={editForm.is_active || ''}
-                      onChange={(e) => setEditForm({...editForm, is_active: e.target.value})}
-                      className={`w-full px-3 py-2 rounded-lg border transition-colors ${
-                        darkMode 
-                          ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500" 
+                      onChange={(e) => setEditForm({ ...editForm, is_active: e.target.value })}
+                      className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
+                          ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
                           : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
-                      }`}
+                        }`}
                     >
                       <option value="1">Ativo</option>
                       <option value="0">Inativo</option>
@@ -989,11 +1004,10 @@ const UserManagement = () => {
                 <div className="flex justify-end space-x-3 pt-4">
                   <button
                     onClick={() => setShowEditModal(false)}
-                    className={`px-4 py-2 rounded-lg border transition-colors ${
-                      darkMode 
-                        ? "border-gray-600 text-gray-300 hover:bg-gray-800" 
+                    className={`px-4 py-2 rounded-lg border transition-colors ${darkMode
+                        ? "border-gray-600 text-gray-300 hover:bg-gray-800"
                         : "border-gray-300 text-gray-700 hover:bg-gray-100"
-                    }`}
+                      }`}
                   >
                     Cancelar
                   </button>
@@ -1014,17 +1028,15 @@ const UserManagement = () => {
       {/* Delete Modal */}
       {showDeleteModal && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className={`rounded-lg shadow-xl max-w-md w-full ${
-            darkMode ? "bg-gray-900" : "bg-white"
-          }`}>
+          <div className={`rounded-lg shadow-xl max-w-md w-full ${darkMode ? "bg-gray-900" : "bg-white"
+            }`}>
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-red-600">Confirmar Exclusão</h3>
                 <button
                   onClick={() => setShowDeleteModal(false)}
-                  className={`p-1 rounded-lg ${
-                    darkMode ? "hover:bg-gray-800" : "hover:bg-gray-100"
-                  }`}
+                  className={`p-1 rounded-lg ${darkMode ? "hover:bg-gray-800" : "hover:bg-gray-100"
+                    }`}
                 >
                   <XCircle className="w-5 h-5" />
                 </button>
@@ -1038,11 +1050,10 @@ const UserManagement = () => {
               <div className="flex justify-end space-x-3">
                 <button
                   onClick={() => setShowDeleteModal(false)}
-                  className={`px-4 py-2 rounded-lg border transition-colors ${
-                    darkMode 
-                      ? "border-gray-600 text-gray-300 hover:bg-gray-800" 
+                  className={`px-4 py-2 rounded-lg border transition-colors ${darkMode
+                      ? "border-gray-600 text-gray-300 hover:bg-gray-800"
                       : "border-gray-300 text-gray-700 hover:bg-gray-100"
-                  }`}
+                    }`}
                 >
                   Cancelar
                 </button>

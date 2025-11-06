@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, Palette, Loader2, Edit2, Plus, Trash2, Users } from 'lucide-react';
+import { X, Palette, Loader2, Edit2, Plus, Trash2, Users, Building2, Filter } from 'lucide-react';
 import Sidebar from '../../components/Sidebar';
 import { campaignService } from '../../services/campaignService';
 import { userService } from '../../services/userService';
@@ -18,11 +18,19 @@ type FormData = {
     operator: string; // String única com IDs separados por vírgula
 };
 
+// Interface para agrupar campanhas por criador
+interface CampaignsByCreator {
+    creator: User;
+    campaigns: Campaign[];
+}
+
 const CampaignsPage = () => {
     const { user, updateCampaign, refreshUser } = useUser();
     const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+    const [campaignsByCreator, setCampaignsByCreator] = useState<CampaignsByCreator[]>([]);
     const [availableManagers, setAvailableManagers] = useState<User[]>([]);
     const [allManagers, setAllManagers] = useState<User[]>([]);
+    const [allUsers, setAllUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(false);
     const [loadingManagers, setLoadingManagers] = useState(false);
     const [imageValid, setImageValid] = useState(true);
@@ -40,6 +48,66 @@ const CampaignsPage = () => {
         operator: '', // String vazia inicialmente
     });
     const [logoPreview, setLogoPreview] = useState<string>('');
+    const [creatorFilter, setCreatorFilter] = useState<string>('all');
+
+    const isSuperUser = user?.role === 'super';
+
+    // Função para verificar se o usuário pode ativar uma campanha
+    const canActivateCampaign = (campaign: Campaign): boolean => {
+        // SUPER USER só pode ativar campanhas que ele mesmo criou
+        if (isSuperUser) {
+            return campaign.created_by.toString() === user?.id;
+        }
+        // Usuários normais podem ativar suas próprias campanhas
+        return campaign.created_by.toString() === user?.id;
+    };
+
+    // Função para verificar se o usuário pode editar uma campanha
+    const canEditCampaign = (campaign: Campaign): boolean => {
+        // SUPER USER pode editar qualquer campanha
+        if (isSuperUser) {
+            return true;
+        }
+        // Usuários normais só podem editar suas próprias campanhas
+        return campaign.created_by.toString() === user?.id;
+    };
+
+    // Função para verificar se o usuário pode excluir uma campanha
+    const canDeleteCampaign = (campaign: Campaign): boolean => {
+        // SUPER USER pode excluir qualquer campanha
+        if (isSuperUser) {
+            return true;
+        }
+        // Usuários normais só podem excluir suas próprias campanhas
+        return campaign.created_by.toString() === user?.id;
+    };
+
+    // Função para agrupar campanhas por criador
+    const groupCampaignsByCreator = (campaignsList: Campaign[]): CampaignsByCreator[] => {
+        const creatorsMap = new Map<string, CampaignsByCreator>();
+
+        campaignsList.forEach(campaign => {
+            const creatorId = campaign.created_by.toString();
+
+            if (!creatorsMap.has(creatorId)) {
+                const creator = allUsers.find(u => u.id === creatorId) || {
+                    id: creatorId,
+                    name: 'Usuário Desconhecido',
+                    email: 'N/A',
+                    role: 'user'
+                } as User;
+
+                creatorsMap.set(creatorId, {
+                    creator,
+                    campaigns: []
+                });
+            }
+
+            creatorsMap.get(creatorId)!.campaigns.push(campaign);
+        });
+
+        return Array.from(creatorsMap.values());
+    };
 
     // Função para obter operadores atualmente vinculados à campanha sendo editada
     const getCurrentCampaignOperators = (): User[] => {
@@ -68,9 +136,10 @@ const CampaignsPage = () => {
             setAvailableManagers(available);
 
             // Buscar todos os managers para exibir nomes
-            const allUsers = await userService.getAll();
-            const allManagerUsers = allUsers.filter(user => user.role === 'manager');
+            const allUsersData = await userService.getAll();
+            const allManagerUsers = allUsersData.filter(user => user.role === 'manager');
             setAllManagers(allManagerUsers);
+            setAllUsers(allUsersData);
 
             // Se estiver editando, carregar operadores atuais da campanha
             if (editing) {
@@ -88,12 +157,28 @@ const CampaignsPage = () => {
     const fetchCampaigns = async () => {
         try {
             setLoading(true);
-            const data = await campaignService.getAll();
-            const list = Array.isArray(data) ? data : [];
-            const userId = user?.id;
-            const filtered = userId ? list.filter((c: Campaign) => String(c.created_by) === String(userId)) : list;
-            setCampaigns(filtered);
+            let data: Campaign[];
+
+            // 🔹 SUPER USER: Carrega TODAS as campanhas do sistema
+            if (isSuperUser) {
+                console.log('👑 SUPER USER: Carregando TODAS as campanhas do sistema');
+                data = await campaignService.getAll();
+            } else {
+                // 🔹 Usuário normal: carrega apenas suas próprias campanhas
+                const userCampaigns = await campaignService.getAll();
+                const userId = user?.id;
+                data = userId ? userCampaigns.filter((c: Campaign) => String(c.created_by) === String(userId)) : [];
+            }
+
+            setCampaigns(data);
             setActiveCampaignId(user?.campaign_id || null);
+
+            // Se for SUPER USER, agrupa campanhas por criador
+            if (isSuperUser) {
+                await fetchAvailableManagers(); // Garante que allUsers está carregado
+                const grouped = groupCampaignsByCreator(data);
+                setCampaignsByCreator(grouped);
+            }
         } catch (err) {
             console.error(err);
             toast.error('Erro ao carregar campanhas');
@@ -104,12 +189,22 @@ const CampaignsPage = () => {
 
     useEffect(() => {
         fetchCampaigns();
-        fetchAvailableManagers();
+        if (!isSuperUser) {
+            fetchAvailableManagers();
+        }
     }, [user]);
 
     useEffect(() => {
         setActiveCampaignId(user?.campaign_id || null);
     }, [user?.campaign_id]);
+
+    // Efeito para reagrupar campanhas quando allUsers for carregado (para SUPER USER)
+    useEffect(() => {
+        if (isSuperUser && campaigns.length > 0 && allUsers.length > 0) {
+            const grouped = groupCampaignsByCreator(campaigns);
+            setCampaignsByCreator(grouped);
+        }
+    }, [campaigns, allUsers, isSuperUser]);
 
     const openCreate = () => {
         setEditing(null);
@@ -126,6 +221,12 @@ const CampaignsPage = () => {
     };
 
     const openEdit = async (c: Campaign) => {
+        // Verificar permissão antes de abrir edição
+        if (!canEditCampaign(c)) {
+            toast.error('Você não tem permissão para editar esta campanha');
+            return;
+        }
+
         setEditing(c);
         setForm({
             name: c.name,
@@ -251,7 +352,13 @@ const CampaignsPage = () => {
         }
     };
 
-    const handleSetActive = async (campaignId: string | number) => {
+    const handleSetActive = async (campaignId: string | number, campaign: Campaign) => {
+        // Verificar permissão antes de ativar
+        if (!canActivateCampaign(campaign)) {
+            toast.error('Você só pode ativar campanhas que você criou');
+            return;
+        }
+
         try {
             const campaignIdStr = String(campaignId);
             await updateCampaign(campaignIdStr);
@@ -264,7 +371,13 @@ const CampaignsPage = () => {
         }
     };
 
-    const handleDelete = async (campaignId: string | number) => {
+    const handleDelete = async (campaignId: string | number, campaign: Campaign) => {
+        // Verificar permissão antes de excluir
+        if (!canDeleteCampaign(campaign)) {
+            toast.error('Você não tem permissão para excluir esta campanha');
+            return;
+        }
+
         if (!confirm('Tem certeza que deseja excluir esta campanha? Esta ação não pode ser desfeita.')) {
             return;
         }
@@ -306,6 +419,23 @@ const CampaignsPage = () => {
         return form.operator ? form.operator.split(',').filter(id => id.trim() !== '') : [];
     };
 
+    // Funções auxiliares para textos dinâmicos
+    const getHeaderDescription = () => {
+        if (isSuperUser) {
+            return 'Visualize TODAS as campanhas do sistema. Você só pode ativar campanhas que você criou.';
+        } else {
+            return 'Gerencie suas campanhas: criar, editar e visualizar.';
+        }
+    };
+
+    // Filtrar campanhas por criador (para SUPER USER)
+    const getFilteredCampaignsByCreator = () => {
+        if (creatorFilter === 'all') {
+            return campaignsByCreator;
+        }
+        return campaignsByCreator.filter(group => group.creator.id === creatorFilter);
+    };
+
     useEffect(() => {
         const handleCampaignChange = (event: CustomEvent) => {
             setActiveCampaignId(event.detail.campaignId);
@@ -324,6 +454,139 @@ const CampaignsPage = () => {
         }
     }, [formOpen, logoPreview]);
 
+    // Componente para renderizar uma campanha individual
+    const renderCampaignCard = (c: Campaign) => {
+        const operatorNames = getOperatorNames(c.operator);
+        const userCanActivate = canActivateCampaign(c);
+        const userCanEdit = canEditCampaign(c);
+        const userCanDelete = canDeleteCampaign(c);
+        const isUserCreator = c.created_by.toString() === user?.id;
+
+        return (
+            <div
+                key={c.id}
+                className="group rounded-xl shadow-lg bg-white dark:bg-gray-800 pt-14 pb-6 px-6 transition hover:shadow-xl hover:-translate-y-1 border border-gray-100 dark:border-gray-700 relative"
+            >
+                <div className="absolute top-3 right-4 flex gap-2 z-10">
+                    {userCanEdit && (
+                        <button
+                            onClick={() => openEdit(c)}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-white font-semibold shadow transition"
+                            title="Editar campanha"
+                        >
+                            <Edit2 className="w-4 h-4" />
+                        </button>
+                    )}
+                    {userCanDelete && (
+                        <button
+                            onClick={() => handleDelete(c.id, c)}
+                            disabled={deleting === c.id}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold shadow transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Excluir campanha"
+                        >
+                            {deleting === c.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <Trash2 className="w-4 h-4" />
+                            )}
+                        </button>
+                    )}
+                </div>
+                <div className="flex flex-col sm:flex-row gap-6 h-full items-stretch">
+                    <div className="relative shrink-0 w-full sm:w-[140px] h-40 sm:h-full">
+                        <img
+                            src={c.logo}
+                            alt={c.name}
+                            className="object-cover rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm w-full h-full"
+                        />
+                        <span className="absolute -top-1 -right-2 bg-blue-600 text-white text-xs px-2 py-1 rounded shadow">
+                            Logo
+                        </span>
+                    </div>
+                    <div className="flex-1 flex flex-col min-w-0 h-full">
+                        <h3
+                            className="text-xl font-bold text-gray-900 dark:text-white mb-2 wrap-break-word truncate"
+                            title={c.name}
+                        >
+                            {c.name}
+                        </h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3 mb-4 grow overflow-hidden">
+                            {c.description}
+                        </p>
+
+                        {/* Informação do criador (apenas para SUPER USER) */}
+                        {isSuperUser && (
+                            <div className="mb-3 p-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                                <div className="flex items-center gap-2">
+                                    <Users className="w-3 h-3 text-gray-500" />
+                                    <span className="text-xs text-gray-600 dark:text-gray-300">
+                                        Criador: {allUsers.find(u => u.id === c.created_by.toString())?.name || 'N/A'}
+                                        {isUserCreator && (
+                                            <span className="ml-1 text-green-600 font-medium">(Você)</span>
+                                        )}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Operadores da campanha */}
+                        <div className="mb-4">
+                            <div className="flex items-center gap-2 mb-2">
+                                <Users className="w-4 h-4 text-gray-500" />
+                                <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                                    Operadores:
+                                </span>
+                            </div>
+                            {operatorNames.length > 0 ? (
+                                <div className="flex flex-wrap gap-1">
+                                    {operatorNames.map((operatorName, index) => (
+                                        <span
+                                            key={index}
+                                            className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs rounded-full"
+                                        >
+                                            {operatorName}
+                                        </span>
+                                    ))}
+                                </div>
+                            ) : (
+                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                    Nenhum operador atribuído
+                                </span>
+                            )}
+                        </div>
+
+                        <div className="flex gap-3 items-center flex-wrap mb-4">
+                            <div className="rounded-lg border border-gray-200 dark:border-gray-700 flex items-center">
+                                <div className="w-10 h-10 rounded-l-lg" style={{ backgroundColor: c.color_primary || '#FCAF15' }} />
+                                <div className="w-10 h-10 rounded-r-lg" style={{ backgroundColor: c.color_secondary || '#0833AF' }} />
+                            </div>
+                            <span className="text-sm font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                                Cores da campanha
+                            </span>
+                        </div>
+
+                        {/* Botão de ativar/desativar */}
+                        {userCanActivate ? (
+                            <button
+                                onClick={() => handleSetActive(c.id, c)}
+                                className={`mt-3 px-4 py-2 rounded-lg font-semibold shadow transition ${activeCampaignId === c.id
+                                    ? 'bg-green-600 hover:bg-green-700 text-white'
+                                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                                    }`}
+                            >
+                                {activeCampaignId === c.id ? 'Ativo' : 'Ativar'}
+                            </button>
+                        ) : (
+                            <div className="mt-3 px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-center font-semibold cursor-not-allowed">
+                                {activeCampaignId === c.id ? 'Ativo' : 'Somente o criador pode ativar'}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     return (
         <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
             <Sidebar />
@@ -333,10 +596,16 @@ const CampaignsPage = () => {
                     <header className="flex pt-7 flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
                         <div className="flex flex-col">
                             <h1 className="text-3xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                                <Palette className="w-7 h-7 text-blue-600" /> Campanhas
+                                <Palette className="w-7 h-7 text-blue-600" />
+                                Campanhas
+                                {isSuperUser && (
+                                    <span className="ml-2 text-sm bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300 px-2 py-1 rounded-full">
+                                        SUPER USER
+                                    </span>
+                                )}
                             </h1>
                             <p className="mt-2 text-gray-600 dark:text-gray-300">
-                                Gerencie suas campanhas: criar, editar e visualizar.
+                                {getHeaderDescription()}
                             </p>
                         </div>
                         <button
@@ -347,118 +616,120 @@ const CampaignsPage = () => {
                         </button>
                     </header>
 
+                    {/* Filtro por criador (apenas para SUPER USER) */}
+                    {isSuperUser && campaignsByCreator.length > 0 && (
+                        <div className="mb-6 bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                            <div className="flex items-center gap-3 mb-3">
+                                <Filter className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    Filtrar por Criador:
+                                </label>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                <button
+                                    onClick={() => setCreatorFilter('all')}
+                                    className={`px-4 py-2 rounded-lg border transition-all ${creatorFilter === 'all'
+                                            ? 'bg-blue-100 border-blue-400 text-blue-800 dark:bg-blue-900/40 dark:border-blue-500 dark:text-blue-200 shadow-md'
+                                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700'
+                                        }`}
+                                >
+                                    Todos os Criadores
+                                </button>
+                                {campaignsByCreator.map(group => (
+                                    <button
+                                        key={group.creator.id}
+                                        onClick={() => setCreatorFilter(group.creator.id)}
+                                        className={`px-4 py-2 rounded-lg border transition-all ${creatorFilter === group.creator.id
+                                                ? 'bg-blue-100 border-blue-400 text-blue-800 dark:bg-blue-900/40 dark:border-blue-500 dark:text-blue-200 shadow-md'
+                                                : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700'
+                                            }`}
+                                    >
+                                        {group.creator.name}
+                                        {group.creator.id === user?.id && (
+                                            <span className="ml-1 text-xs bg-green-100 text-green-800 px-1 rounded">Você</span>
+                                        )}
+                                        <span className="ml-2 text-xs bg-gray-200 dark:bg-gray-600 px-1 rounded">
+                                            {group.campaigns.length}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     <section>
                         {loading ? (
                             <div className="flex items-center justify-center py-12">
                                 <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
                                 <span className="ml-3 text-gray-600 dark:text-gray-300">Carregando campanhas...</span>
                             </div>
-                        ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-                                {campaigns.map(c => {
-                                    const operatorNames = getOperatorNames(c.operator);
-                                    return (
-                                        <div
-                                            key={c.id}
-                                            className="group rounded-xl shadow-lg bg-white dark:bg-gray-800 pt-14 pb-6 px-6 transition hover:shadow-xl hover:-translate-y-1 border border-gray-100 dark:border-gray-700 relative"
-                                        >
-                                            <div className="absolute top-3 right-4 flex gap-2 z-10">
-                                                <button
-                                                    onClick={() => openEdit(c)}
-                                                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-white font-semibold shadow transition"
-                                                    title="Editar campanha"
-                                                >
-                                                    <Edit2 className="w-4 h-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(c.id)}
-                                                    disabled={deleting === c.id}
-                                                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold shadow transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                                    title="Excluir campanha"
-                                                >
-                                                    {deleting === c.id ? (
-                                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                                    ) : (
-                                                        <Trash2 className="w-4 h-4" />
-                                                    )}
-                                                </button>
-                                            </div>
-                                            <div className="flex flex-col sm:flex-row gap-6 h-full items-stretch">
-                                                <div className="relative shrink-0 w-full sm:w-[140px] h-40 sm:h-full">
-                                                    <img
-                                                        src={c.logo}
-                                                        alt={c.name}
-                                                        className="object-cover rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm w-full h-full"
-                                                    />
-                                                    <span className="absolute -top-1 -right-2 bg-blue-600 text-white text-xs px-2 py-1 rounded shadow">
-                                                        Logo
-                                                    </span>
+                        ) : isSuperUser ? (
+                            // 🔹 VISUALIZAÇÃO SUPER USER: Campanhas agrupadas por criador
+                            <div className="space-y-8">
+                                {getFilteredCampaignsByCreator().map(group => (
+                                    <div key={group.creator.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                        {/* Header do grupo de criador */}
+                                        <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-6 text-white">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+                                                    <Users className="w-6 h-6" />
                                                 </div>
-                                                <div className="flex-1 flex flex-col min-w-0 h-full">
-                                                    <h3
-                                                        className="text-xl font-bold text-gray-900 dark:text-white mb-2 wrap-break-word truncate"
-                                                        title={c.name}
-                                                    >
-                                                        {c.name}
-                                                    </h3>
-                                                    <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3 mb-4 grow overflow-hidden">
-                                                        {c.description}
-                                                    </p>
-
-                                                    {/* Operadores da campanha */}
-                                                    <div className="mb-4">
-                                                        <div className="flex items-center gap-2 mb-2">
-                                                            <Users className="w-4 h-4 text-gray-500" />
-                                                            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
-                                                                Operadores:
-                                                            </span>
-                                                        </div>
-                                                        {operatorNames.length > 0 ? (
-                                                            <div className="flex flex-wrap gap-1">
-                                                                {operatorNames.map((operatorName, index) => (
-                                                                    <span
-                                                                        key={index}
-                                                                        className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs rounded-full"
-                                                                    >
-                                                                        {operatorName}
-                                                                    </span>
-                                                                ))}
-                                                            </div>
-                                                        ) : (
-                                                            <span className="text-xs text-gray-500 dark:text-gray-400">
-                                                                Nenhum operador atribuído
-                                                            </span>
+                                                <div>
+                                                    <h3 className="text-xl font-bold">
+                                                        {group.creator.name}
+                                                        {group.creator.id === user?.id && (
+                                                            <span className="ml-2 text-sm bg-green-500 text-white px-2 py-1 rounded-full">Você</span>
                                                         )}
-                                                    </div>
-
-                                                    <div className="flex gap-3 items-center flex-wrap mb-4">
-                                                        <div className="rounded-lg border border-gray-200 dark:border-gray-700 flex items-center">
-                                                            <div className="w-10 h-10 rounded-l-lg" style={{ backgroundColor: c.color_primary || '#FCAF15' }} />
-                                                            <div className="w-10 h-10 rounded-r-lg" style={{ backgroundColor: c.color_secondary || '#0833AF' }} />
-                                                        </div>
-                                                        <span className="text-sm font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">
-                                                            Cores da campanha
-                                                        </span>
-                                                    </div>
-                                                    <button
-                                                        onClick={() => handleSetActive(c.id)}
-                                                        className={`mt-3 px-4 py-2 rounded-lg font-semibold shadow transition ${activeCampaignId === c.id
-                                                            ? 'bg-green-600 hover:bg-green-700 text-white'
-                                                            : 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200'
-                                                            }`}
-                                                    >
-                                                        {activeCampaignId === c.id ? 'Ativo' : 'Ativar'}
-                                                    </button>
+                                                    </h3>
+                                                    <p className="text-sm opacity-90">
+                                                        {group.creator.email} • {group.creator.role}
+                                                    </p>
+                                                    <p className="text-xs opacity-80 mt-1">
+                                                        {group.campaigns.length} campanha(s) criada(s)
+                                                    </p>
                                                 </div>
                                             </div>
                                         </div>
-                                    );
-                                })}
+
+                                        {/* Campanhas do criador */}
+                                        <div className="p-6">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                                {group.campaigns.map(campaign => renderCampaignCard(campaign))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            // 🔹 VISUALIZAÇÃO USUÁRIO NORMAL: Grid simples de campanhas
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+                                {campaigns.map(c => renderCampaignCard(c))}
+                            </div>
+                        )}
+
+                        {/* Mensagem quando não há campanhas */}
+                        {campaigns.length === 0 && !loading && (
+                            <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+                                <Building2 className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+                                <p className="text-gray-500 dark:text-gray-400">
+                                    {isSuperUser
+                                        ? 'Nenhuma campanha encontrada no sistema.'
+                                        : 'Você ainda não criou nenhuma campanha.'
+                                    }
+                                </p>
+                                {!isSuperUser && (
+                                    <button
+                                        onClick={openCreate}
+                                        className="mt-4 flex items-center gap-2 px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow transition mx-auto"
+                                    >
+                                        <Plus className="w-5 h-5" /> Criar Primeira Campanha
+                                    </button>
+                                )}
                             </div>
                         )}
                     </section>
 
-                    {/* Modal criação/edição */}
+                    {/* Modal criação/edição (mantido igual) */}
                     {formOpen && (
                         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-fadeIn">
                             <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl p-8 relative border border-gray-200 dark:border-gray-700 max-h-[90vh] overflow-y-auto">

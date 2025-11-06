@@ -1,10 +1,10 @@
 // src/pages/ForgotPassword.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
-import { ArrowLeft, Mail, Lock, CheckCircle, Eye, EyeOff, RefreshCw } from "lucide-react";
+import { ArrowLeft, Mail, Lock, CheckCircle, Eye, EyeOff } from "lucide-react";
 import { useTheme } from "../../context/ThemeContext";
 import { authService } from "../../services/authService";
 import { usePasswordRecovery } from "../hooks/usePasswordRecovery";
@@ -22,9 +22,6 @@ const ForgotPassword: React.FC = () => {
     const { darkMode, colors } = useTheme();
     const {
         recoveryReady,
-        recoveryLoading,
-        recoveryError,
-        refreshRecoveryToken
     } = usePasswordRecovery();
 
     const [currentStep, setCurrentStep] = useState<Step>('email');
@@ -285,16 +282,6 @@ const ForgotPassword: React.FC = () => {
                 </div>
             </div>
         );
-    };
-
-    // Função para recarregar o sistema de recovery
-    const handleRetryRecovery = async () => {
-        try {
-            await refreshRecoveryToken();
-            toast.success("Sistema de recuperação reconectado!");
-        } catch (error: any) {
-            toast.error("Erro ao reconectar sistema de recuperação");
-        }
     };
 
     // Função auxiliar para determinar o status do step

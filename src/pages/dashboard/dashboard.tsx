@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Users, Award, Send, Activity, UserPlus, ChevronDown, ChevronRight, Target, Network, GitBranch, Zap, Building2 } from "lucide-react";
+import { Users, Award, Send, Activity, UserPlus, GitBranch, Building2, Target } from "lucide-react";
 import Sidebar from "../../components/Sidebar";
 import Header from "../../components/Header";
 import { useTheme } from "../../context/ThemeContext";
 import { useUser } from '../../context/UserContext';
 import { userService, type User } from '../../services/userService';
-import { campaignService } from '../../services/campaignService';
 import { networkService, type NetworkUser } from '../../services/networkService';
 
 const Dashboard = () => {
@@ -377,7 +376,7 @@ const Dashboard = () => {
 
   // Renderizar gráfico de rede circular
   const renderNetworkRadialChart = () => {
-    const { totalMembers, directInvites, networkDepth, totalCampaigns } = dashboardData.networkStats;
+    const { totalMembers, directInvites, totalCampaigns } = dashboardData.networkStats;
     
     return (
       <div className="flex flex-col items-center justify-center p-6">
@@ -581,7 +580,7 @@ const Dashboard = () => {
 
   // Renderizar métricas de performance da rede
   const renderNetworkMetrics = () => {
-    const { totalMembers, directInvites, networkDepth, totalCampaigns } = dashboardData.networkStats;
+    const { totalMembers, directInvites, totalCampaigns } = dashboardData.networkStats;
     
     const metrics = [
       {
@@ -936,7 +935,7 @@ const ActivityItem = ({ icon, bg, text, time }: any) => {
   );
 };
 
-const StatItem = ({ label, value, icon, color, darkMode }: any) => {
+const StatItem = ({ label, value, icon, color }: any) => {
   return (
     <div className="flex items-center justify-between p-3 rounded-lg bg-white dark:bg-gray-700 shadow-sm">
       <div className="flex items-center space-x-3">

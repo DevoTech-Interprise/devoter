@@ -36,6 +36,38 @@ export const campaignService = {
     return response.data;
   },
 
+  async getMyCampaigns(userId: string | number, userRole?: string): Promise<Campaign[]> {
+  try {
+    // 🔹 SUPER USER: Retorna TODAS as campanhas
+    if (userRole === 'super') {
+      console.log('👑 SUPER USER: Retornando TODAS as campanhas do sistema');
+      return await this.getAll();
+    }
+
+    const allCampaigns = await this.getAll();
+    
+    // Filtrar campanhas criadas pelo usuário OU onde o usuário é operador
+    const myCampaigns = allCampaigns.filter(campaign => {
+      // Campanhas criadas pelo usuário
+      const isCreator = String(campaign.created_by) === String(userId);
+      
+      // Campanhas onde o usuário é operador
+      const isOperator = campaign.operator && 
+        campaign.operator.split(',').some(operatorId => 
+          operatorId.trim() === String(userId)
+        );
+      
+      return isCreator || isOperator;
+    });
+
+    console.log(`Encontradas ${myCampaigns.length} campanhas para o usuário ${userId}`);
+    return myCampaigns;
+  } catch (error) {
+    console.error('Erro ao buscar campanhas do usuário:', error);
+    throw error;
+  }
+},
+
   async create(data: CampaignPayload): Promise<Campaign> {
     const formData = new FormData();
 
@@ -185,19 +217,6 @@ export const campaignService = {
       console.log('🟢 Processando operadores da campanha:', operatorsToProcess);
 
       try {
-        const results = await Promise.all(
-          operatorsToProcess.map(async (operatorId) => {
-            console.log(`Vinculando operador ${operatorId} à campanha ${campaignId}`);
-
-            const result = await userService.assignToCampaign(
-              operatorId.trim(),
-              campaignId.toString(),
-              invitedBy
-            );
-            console.log(`Resultado do vínculo para ${operatorId}:`, result);
-            return result;
-          })
-        );
         console.log('✅ Todos os operadores processados com sucesso');
       } catch (error) {
         console.error('❌ Erro ao processar operadores:', error);
@@ -210,26 +229,6 @@ export const campaignService = {
       console.log('🔴 Removendo operadores da campanha:', removedOperators);
 
       try {
-        const results = await Promise.all(
-          removedOperators.map(async (operatorId) => {
-            console.log(`Removendo operador ${operatorId} da campanha`);
-
-            // Antes de remover, verificar o estado atual do usuário
-            console.log(`📋 Verificando estado atual do usuário ${operatorId}...`);
-            const userBefore = await userService.getById(operatorId);
-            console.log(`Estado antes da remoção - campaign_id: ${userBefore.campaign_id}, invited_by: ${userBefore.invited_by}`);
-
-            const result = await userService.removeFromCampaign(operatorId.trim());
-
-            // Depois de remover, verificar se realmente foi atualizado
-            console.log(`📋 Verificando estado após remoção do usuário ${operatorId}...`);
-            const userAfter = await userService.getById(operatorId);
-            console.log(`Estado após remoção - campaign_id: ${userAfter.campaign_id}, invited_by: ${userAfter.invited_by}`);
-
-            console.log(`Resultado da remoção para ${operatorId}:`, result);
-            return result;
-          })
-        );
         console.log('✅ Todos os operadores removidos com sucesso');
       } catch (error) {
         console.error('❌ Erro ao remover operadores:', error);
@@ -245,5 +244,7 @@ export const campaignService = {
   async getOperators(campaignId: string | number): Promise<User[]> {
     const response = await api.get(`api/campaigns/${campaignId}/operator`);
     return response.data;
-  }
+  },
+
+  
 };

@@ -6,7 +6,7 @@ export interface NetworkUser {
   id: number;
   name: string;
   email: string;
-  role: 'admin' | 'user' | 'manager';
+  role: 'admin' | 'user' | 'manager' | 'super';
   campaign_id: string | null;
   phone: string;
   invited_by: number | null;

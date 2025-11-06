@@ -22,18 +22,29 @@ const NetworkPage = () => {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState<string>('all');
   const [filteredNetwork, setFilteredNetwork] = useState<EnhancedNetworkUser | null>(null);
-  const [allUsers, setAllUsers] = useState<UserType[]>([]);
+  const [, setAllUsers] = useState<UserType[]>([]);
   const [campaignCreatorId, setCampaignCreatorId] = useState<string | null>(null);
   const [accessibleCampaigns, setAccessibleCampaigns] = useState<Campaign[]>([]);
 
   const isAdmin = user?.role === 'admin';
+  const isSuperUser = user?.role === 'super';
 
-  // Busca campanhas que o usuário pode acessar
+  // Busca campanhas que o usuário pode acessar - MODIFICADO para SUPER USER
   const fetchAccessibleCampaigns = async () => {
     if (!user?.id) return [];
     
     try {
-      const campaigns = await networkService.getUserAccessibleCampaigns(user.id);
+      let campaigns: Campaign[] = [];
+
+      // 🔹 SUPER USER: Pode ver TODAS as campanhas
+      if (isSuperUser) {
+        console.log('👑 SUPER USER: Carregando TODAS as campanhas do sistema');
+        campaigns = await campaignService.getAll();
+      } else {
+        // 🔹 ADMIN/MANAGER/USER: Lógica normal (apenas campanhas acessíveis)
+        campaigns = await networkService.getUserAccessibleCampaigns(user.id);
+      }
+
       setAccessibleCampaigns(campaigns);
       return campaigns;
     } catch (error) {
@@ -42,7 +53,7 @@ const NetworkPage = () => {
     }
   };
 
-  // Função para buscar a rede usando a nova rota
+  // Função para buscar a rede usando a nova rota - MODIFICADO para SUPER USER
   const getFullCampaignNetwork = async (campaignId?: string): Promise<NetworkUser | null> => {
     if (!user?.id) return null;
 
@@ -54,14 +65,17 @@ const NetworkPage = () => {
         return await networkService.getNetworkTree(user.id);
       }
 
-      // Verifica se o usuário tem acesso à campanha
-      const hasAccess = accessibleCampaigns.some(campaign => 
-        campaign.id.toString() === targetCampaignId
-      );
+      // 🔹 SUPER USER: Não verifica acesso, pode ver tudo
+      if (!isSuperUser) {
+        // Verifica se o usuário tem acesso à campanha (apenas para não-super)
+        const hasAccess = accessibleCampaigns.some(campaign => 
+          campaign.id.toString() === targetCampaignId
+        );
 
-      if (!hasAccess) {
-        console.warn(`Usuário não tem acesso à campanha ${targetCampaignId}`);
-        return await networkService.getNetworkTree(user.id);
+        if (!hasAccess) {
+          console.warn(`Usuário não tem acesso à campanha ${targetCampaignId}`);
+          return await networkService.getNetworkTree(user.id);
+        }
       }
 
       // Busca a campanha
@@ -72,7 +86,13 @@ const NetworkPage = () => {
 
       // Determina o root da rede
       let networkRootUserId: string | number;
-      if (campaign.created_by.toString() === user.id.toString()) {
+      
+      // 🔹 SUPER USER: Sempre usa o criador da campanha como root
+      if (isSuperUser) {
+        networkRootUserId = campaign.created_by;
+      } 
+      // Usuário normal: usa lógica padrão
+      else if (campaign.created_by.toString() === user.id.toString()) {
         networkRootUserId = user.id;
       } else {
         networkRootUserId = campaign.created_by;
@@ -194,7 +214,7 @@ const NetworkPage = () => {
         return;
       }
 
-      console.log(`👤 Usuário: ${user.name}, Campanha: ${user.campaign_id}, Admin: ${isAdmin}`);
+      console.log(`👤 Usuário: ${user.name}, Role: ${user.role}, Campanha: ${user.campaign_id}`);
 
       // Busca campanhas acessíveis
       const accessibleCamps = await fetchAccessibleCampaigns();
@@ -211,7 +231,16 @@ const NetworkPage = () => {
       // Busca a rede
       let networkData: NetworkUser | null;
       
-      if (isAdmin && selectedCampaign === 'all') {
+      if (isSuperUser && selectedCampaign === 'all') {
+        // 🔹 SUPER USER vendo todas as campanhas: busca rede do primeiro criador de campanha
+        if (accessibleCamps.length > 0) {
+          const firstCampaign = accessibleCamps[0];
+          networkData = await getFullCampaignNetwork(firstCampaign.id.toString());
+          setSelectedCampaign(firstCampaign.id.toString());
+        } else {
+          networkData = await networkService.getNetworkTree(user.id);
+        }
+      } else if ((isAdmin || isSuperUser) && selectedCampaign === 'all') {
         // Admin vendo todas as campanhas: busca rede do próprio usuário
         networkData = await networkService.getNetworkTree(user.id);
       } else {
@@ -230,7 +259,7 @@ const NetworkPage = () => {
       setNetwork(enhancedNetwork);
 
       // Aplica filtro e expande nós
-      if (isAdmin && selectedCampaign === 'all') {
+      if ((isAdmin || isSuperUser) && selectedCampaign === 'all') {
         setFilteredNetwork(enhancedNetwork);
         setExpandedNodes(new Set([enhancedNetwork.id]));
       } else {
@@ -272,6 +301,8 @@ const NetworkPage = () => {
 
   const getRoleIcon = (role: string) => {
     switch (role) {
+      case 'super':
+        return <Shield className="w-4 h-4 text-red-500" />;
       case 'admin':
         return <Crown className="w-4 h-4 text-yellow-500" />;
       case 'manager':
@@ -285,6 +316,8 @@ const NetworkPage = () => {
 
   const getRoleColor = (role: string) => {
     switch (role) {
+      case 'super':
+        return 'bg-red-100 text-red-800 border-red-200';
       case 'admin':
         return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'manager':
@@ -387,7 +420,8 @@ const NetworkPage = () => {
                       )}
                   </div>
                   <span className={`text-xs px-2 py-1 rounded-full border ${getRoleColor(node.role)}`}>
-                    {node.role === 'admin' ? 'Administrador' : 
+                    {node.role === 'super' ? 'Super User' :
+                     node.role === 'admin' ? 'Administrador' : 
                      node.role === 'manager' ? 'Manager' : 'Usuário'}
                   </span>
                 </div>
@@ -443,23 +477,15 @@ const NetworkPage = () => {
     );
   };
 
-  // Componente do Filtro de Campanha
+  // Componente do Filtro de Campanha - MODIFICADO para SUPER USER
   const renderCampaignFilter = () => {
     if (accessibleCampaigns.length === 0) {
       return (
         <></>
-        // <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg">
-        //   <p className="text-yellow-800 dark:text-yellow-200">
-        //     {isAdmin 
-        //       ? 'Você não criou ou não gerencia nenhuma campanha.'
-        //       : 'Você não está associado a nenhuma campanha.'
-        //     }
-        //   </p>
-        // </div>
       );
     }
 
-    if (!isAdmin) {
+    if (!isAdmin && !isSuperUser) {
       const userCampaign = accessibleCampaigns[0]; // Usuário comum geralmente tem apenas uma campanha
       return (
         <div className="mb-6">
@@ -496,7 +522,7 @@ const NetworkPage = () => {
                 : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700'
             }`}
           >
-            Minhas Campanhas
+            {isSuperUser ? 'Todas as Campanhas' : 'Minhas Campanhas'}
           </button>
           
           {accessibleCampaigns.map((campaign) => (
@@ -510,12 +536,10 @@ const NetworkPage = () => {
               }`}
             >
               {campaign.name}
-              {/* {campaign.created_by?.toString() === user?.id && (
-                <span className="ml-1 text-xs bg-green-100 text-green-800 px-1 rounded">Criador</span>
-              )} */}
-              {campaign.operator && campaign.operator.split(',').map(id => id.trim()).includes(user?.id || '') && 
-               campaign.created_by?.toString() !== user?.id && (
-                <span className="ml-1 text-xs bg-purple-100 text-purple-800 px-1 rounded">Manager</span>
+              {isSuperUser && campaign.created_by?.toString() !== user?.id && (
+                <span className="ml-1 text-xs bg-gray-100 text-gray-800 px-1 rounded">
+                  ID: {campaign.id}
+                </span>
               )}
             </button>
           ))}
@@ -527,11 +551,27 @@ const NetworkPage = () => {
               Mostrando rede da campanha: <strong>
                 {accessibleCampaigns.find(c => c.id.toString() === selectedCampaign)?.name}
               </strong>
+              {isSuperUser && (
+                <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
+                  SUPER USER
+                </span>
+              )}
             </span>
           </div>
         )}
       </div>
     );
+  };
+
+  // Funções auxiliares para textos dinâmicos
+  const getHeaderDescription = () => {
+    if (isSuperUser) {
+      return 'Visualize as redes de TODAS as campanhas do sistema';
+    } else if (isAdmin) {
+      return 'Visualize as redes das campanhas que você cria ou gerencia';
+    } else {
+      return 'Visualize a rede da sua campanha';
+    }
   };
 
   if (loading) {
@@ -566,12 +606,14 @@ const NetworkPage = () => {
                 <div>
                   <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
                     Minha Rede
+                    {isSuperUser && (
+                      <span className="ml-2 text-sm bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300 px-2 py-1 rounded-full">
+                        SUPER USER
+                      </span>
+                    )}
                   </h1>
                   <p className="mt-2 text-gray-600 dark:text-gray-400">
-                    {isAdmin 
-                      ? 'Visualize as redes das campanhas que você cria ou gerencia' 
-                      : 'Visualize a rede da sua campanha'
-                    }
+                    {getHeaderDescription()}
                   </p>
                 </div>
               </div>
@@ -643,6 +685,11 @@ const NetworkPage = () => {
               <div className="flex items-center gap-2 mb-6">
                 <h2 className="text-xl font-semibold text-gray-800 dark:text-white">
                   Estrutura da Rede
+                  {isSuperUser && selectedCampaign !== 'all' && (
+                    <span className="ml-2 text-sm font-normal text-blue-600 dark:text-blue-400">
+                      ({accessibleCampaigns.find(c => c.id.toString() === selectedCampaign)?.name})
+                    </span>
+                  )}
                   {isAdmin && selectedCampaign !== 'all' && (
                     <span className="ml-2 text-sm font-normal text-blue-600 dark:text-blue-400">
                       ({accessibleCampaigns.find(c => c.id.toString() === selectedCampaign)?.name})
@@ -654,7 +701,7 @@ const NetworkPage = () => {
 
               {filteredNetwork ? (
                 <div className="relative">
-                  {renderTreeNode(filteredNetwork, 0, !isAdmin)}
+                  {renderTreeNode(filteredNetwork, 0, !isAdmin && !isSuperUser)}
                 </div>
               ) : (
                 <div className="text-center py-12">
@@ -674,12 +721,16 @@ const NetworkPage = () => {
                 <div className="w-3 h-3 rounded-full bg-blue-500"></div>
                 <span>Você (Usuário atual)</span>
               </div>
-              {!isAdmin && (
+              {!isAdmin && !isSuperUser && (
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full bg-green-500"></div>
                   <span>Criador da Campanha</span>
                 </div>
               )}
+              <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4 text-red-500" />
+                <span>Super User</span>
+              </div>
               <div className="flex items-center gap-2">
                 <Crown className="w-4 h-4 text-yellow-500" />
                 <span>Administrador</span>

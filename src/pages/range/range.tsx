@@ -1,4 +1,3 @@
-// src/pages/networks/alcance.tsx
 import { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle } from 'react-leaflet';
 import { Layers, Filter, Users, Navigation, MapPin, ZoomIn } from 'lucide-react';
@@ -8,6 +7,7 @@ import { userService, type User } from '../../services/userService';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import 'leaflet/dist/leaflet.css';
+import { useUser } from '../../context/UserContext';
 
 // Fix para ícones do Leaflet em React
 import L from 'leaflet';
@@ -106,6 +106,7 @@ interface UserGroup {
 }
 
 const AlcancePage = () => {
+    const { user } = useUser(); // Acessar usuário logado
     const [campaigns, setCampaigns] = useState<Campaign[]>([]);
     const [selectedCampaign, setSelectedCampaign] = useState<string>('');
     const [networkUsers, setNetworkUsers] = useState<User[]>([]);
@@ -118,18 +119,29 @@ const AlcancePage = () => {
     
     const mapRef = useRef<L.Map | null>(null);
 
-    // Buscar campanhas
+    // Buscar campanhas - MODIFICADO para SUPER USER
     const fetchCampaigns = async () => {
         try {
-            const response = await campaignService.getAll() as any;
-            const campaignsData: Campaign[] = Array.isArray(response)
-                ? response
-                : (response?.campaigns || []);
+            if (!user?.id) {
+                console.log('Usuário não logado');
+                return;
+            }
 
-            setCampaigns(campaignsData);
+            let userCampaigns: Campaign[] = [];
 
-            if (campaignsData.length > 0 && !selectedCampaign) {
-                setSelectedCampaign(campaignsData[0].id.toString());
+            // 🔹 SUPER USER: Pode ver TODAS as campanhas
+            if (user?.role === 'super') {
+                console.log('👑 SUPER USER: Carregando TODAS as campanhas do sistema');
+                userCampaigns = await campaignService.getAll();
+            } else {
+                // 🔹 ADMIN/MANAGER/USER: Lógica normal (apenas campanhas do usuário)
+                userCampaigns = await campaignService.getMyCampaigns(user.id);
+            }
+
+            setCampaigns(userCampaigns);
+
+            if (userCampaigns.length > 0 && !selectedCampaign) {
+                setSelectedCampaign(userCampaigns[0].id.toString());
             }
         } catch (error) {
             console.error('Erro ao carregar campanhas:', error);
@@ -137,11 +149,22 @@ const AlcancePage = () => {
         }
     };
 
-    // Buscar rede de usuários quando campanha for selecionada
+    // Buscar rede de usuários quando campanha for selecionada - MODIFICADO para SUPER USER
     const fetchNetworkUsers = async (campaignId: string) => {
         try {
             setLoading(true);
-            const users = await userService.getNetworkUsersByCampaign(campaignId);
+            
+            let users: User[] = [];
+
+            // 🔹 SUPER USER: Pode ver TODOS os usuários da campanha selecionada
+            if (user?.role === 'super') {
+                console.log('👑 SUPER USER: Carregando TODOS os usuários da campanha');
+                users = await userService.getUsersByCampaign(campaignId);
+            } else {
+                // 🔹 ADMIN/MANAGER/USER: Lógica normal (apenas rede da campanha)
+                users = await userService.getNetworkUsersByCampaign(campaignId);
+            }
+
             setNetworkUsers(users);
 
             // Processar geocoding em lote
@@ -319,7 +342,7 @@ const AlcancePage = () => {
     // Calcular raio baseado no tipo de localização
     const getRadiusForGroup = (group: UserGroup): number => {
         if (group.type === 'neighborhood') {
-            return 500; // 1km para bairros
+            return 500; // 500m para bairros
         }
         return 2000; // 2km para cidades
     };
@@ -366,9 +389,34 @@ const AlcancePage = () => {
         return campaigns.find(campaign => campaign.id.toString() === selectedCampaign);
     };
 
+    // Funções auxiliares para textos dinâmicos
+    const getHeaderDescription = () => {
+        if (user?.role === 'super') {
+            return 'Visualize a influência geográfica de TODAS as campanhas do sistema';
+        } else if (user?.role === 'admin') {
+            return 'Visualize a influência geográfica das suas campanhas';
+        } else {
+            return 'Visualize a influência geográfica da sua rede por campanha';
+        }
+    };
+
+    const getNoCampaignsMessage = () => {
+        if (user?.role === 'super') {
+            return 'Nenhuma campanha encontrada no sistema.';
+        } else {
+            return `Você não possui campanhas para visualizar. ${
+                user?.role === 'admin' 
+                ? 'Crie uma campanha ou seja adicionado como operador em uma campanha existente.' 
+                : 'Entre em contato com um administrador para ser adicionado a uma campanha.'
+            }`;
+        }
+    };
+
     useEffect(() => {
-        fetchCampaigns();
-    }, []);
+        if (user) {
+            fetchCampaigns();
+        }
+    }, [user]);
 
     useEffect(() => {
         if (selectedCampaign) {
@@ -396,9 +444,14 @@ const AlcancePage = () => {
                                 <div>
                                     <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
                                         Mapa de Alcance
+                                        {user?.role === 'super' && (
+                                            <span className="ml-2 text-sm bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300 px-2 py-1 rounded-full">
+                                                SUPER USER
+                                            </span>
+                                        )}
                                     </h1>
                                     <p className="mt-2 text-gray-600 dark:text-gray-400">
-                                        Visualize a influência geográfica da sua rede por campanha
+                                        {getHeaderDescription()}
                                     </p>
                                 </div>
                             </div>
@@ -419,25 +472,63 @@ const AlcancePage = () => {
                                         className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
                                     >
                                         <option value="">Selecione uma campanha</option>
-                                        {campaigns.map(campaign => (
-                                            <option key={campaign.id} value={campaign.id}>
-                                                {campaign.name}
+                                        {campaigns.length === 0 ? (
+                                            <option value="" disabled>
+                                                Nenhuma campanha disponível
                                             </option>
-                                        ))}
+                                        ) : (
+                                            campaigns.map(campaign => (
+                                                <option key={campaign.id} value={campaign.id}>
+                                                    {campaign.name}
+                                                    {user?.role === 'super' && (
+                                                        <span className="text-gray-500 text-xs ml-2">
+                                                            (Criador: {campaign.created_by})
+                                                        </span>
+                                                    )}
+                                                </option>
+                                            ))
+                                        )}
                                     </select>
 
                                     {selectedCampaignData && (
                                         <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                                             <MapPin className="w-4 h-4" />
                                             <span>{selectedCampaignData.name}</span>
+                                            {user?.role === 'super' && (
+                                                <span className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 px-2 py-1 rounded-full">
+                                                    ID: {selectedCampaignData.id}
+                                                </span>
+                                            )}
                                         </div>
                                     )}
                                 </div>
+
+                                {/* Mensagem quando não há campanhas */}
+                                {campaigns.length === 0 && selectedCampaign === '' && (
+                                    <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                                        <div className="flex items-center gap-2">
+                                            <Filter className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+                                            <p className="text-yellow-800 dark:text-yellow-300 text-sm">
+                                                {getNoCampaignsMessage()}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Estatísticas */}
                             {selectedCampaign && (
-                                <div className="grid grid-cols-2 md:grid-cols-8 gap-4 mb-6">
+                                <div className="grid grid-cols-2 md:grid-cols-9 gap-4 mb-6">
+                                    {/* Indicador de Visualização */}
+                                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                                        <div className="text-center">
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">Visualização</p>
+                                            <p className="text-sm font-bold text-gray-900 dark:text-white">
+                                                {user?.role === 'super' ? 'Todos (Super)' : 'Minha Rede'}
+                                            </p>
+                                        </div>
+                                    </div>
+
                                     <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                                         <div className="text-center">
                                             <p className="text-sm text-gray-600 dark:text-gray-400">Total de Membros</p>
@@ -582,9 +673,11 @@ const AlcancePage = () => {
                                                                             <span className={`inline-block px-2 py-1 text-xs rounded-full ${
                                                                                 user.role === 'admin' 
                                                                                     ? 'bg-yellow-100 text-yellow-800' 
+                                                                                    : user.role === 'super'
+                                                                                    ? 'bg-red-100 text-red-800'
                                                                                     : 'bg-blue-100 text-blue-800'
                                                                             }`}>
-                                                                                {user.role === 'admin' ? 'Administrador' : 'Usuário'}
+                                                                                {user.role === 'admin' ? 'Administrador' : user.role === 'super' ? 'Super User' : 'Usuário'}
                                                                             </span>
                                                                         </div>
                                                                     </div>
@@ -654,7 +747,7 @@ const AlcancePage = () => {
                                 <div className="p-4 border-b border-gray-200 dark:border-gray-700">
                                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                                         <Users className="w-5 h-5" />
-                                        Membros da Rede ({networkUsers.length})
+                                        {user?.role === 'super' ? 'Todos os Usuários' : 'Membros da Rede'} ({networkUsers.length})
                                     </h3>
                                 </div>
 
@@ -695,6 +788,11 @@ const AlcancePage = () => {
                                                             <div>
                                                                 <p className="font-medium text-gray-900 dark:text-white">{user.name}</p>
                                                                 <p className="text-sm text-gray-500 dark:text-gray-400">{user.email}</p>
+                                                                {user.role === 'super' && (
+                                                                    <span className="inline-block mt-1 px-2 py-1 text-xs bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300 rounded-full">
+                                                                        Super User
+                                                                    </span>
+                                                                )}
                                                             </div>
                                                         </td>
                                                         <td className="px-4 py-3">

@@ -1,5 +1,4 @@
 import api from './api';
-
 import { testAuthService } from './testAuthService';
 
 // Cache para o token
@@ -81,7 +80,7 @@ export const userService = {
     return allUsers.filter(user => user.campaign_id === campaignId);
   },
 
-  // 🔹 Busca toda a rede de usuários de uma campanha
+  // No userService.ts, modifique o getNetworkUsersByCampaign para ser mais robusto:
   getNetworkUsersByCampaign: async (campaignId: string): Promise<User[]> => {
     const allUsers = await userService.getAll();
     const campaignUsers = allUsers.filter(user => user.campaign_id === campaignId);
@@ -134,6 +133,61 @@ export const userService = {
       (!user.campaign_id || user.campaign_id === null || user.campaign_id === '')
     );
   },
+
+  // Adicione este método ao userService
+  getManageableUsers: async (userId: string | number | undefined, userRole?: string): Promise<User[]> => {
+    try {
+      console.log('🔍 Buscando usuários gerenciáveis para:', userId, 'Role:', userRole);
+
+      // Se o usuário é super, retorna todos os usuários
+      if (userRole === 'super') {
+        console.log('👑 Usuário SUPER: carregando todos os usuários');
+        return await userService.getAll();
+      }
+
+      // Buscar todas as campanhas
+      const response = await api.get('api/campaigns');
+      const allCampaigns = response.data;
+
+      // Filtrar campanhas que o usuário criou ou gerencia
+      const myCampaigns = allCampaigns.filter((campaign: any) => {
+        const isCreator = String(campaign.created_by) === String(userId);
+        const isOperator = campaign.operator &&
+          campaign.operator.split(',').some((operatorId: string) =>
+            operatorId.trim() === String(userId)
+          );
+        return isCreator || isOperator;
+      });
+
+      console.log(`📋 Encontradas ${myCampaigns.length} campanhas do usuário`);
+
+      // Buscar todos os usuários
+      const allUsers = await userService.getAll();
+
+      // Se não tem campanhas, retorna apenas o próprio usuário (se existir)
+      if (myCampaigns.length === 0) {
+        const currentUser = allUsers.find(user => String(user.id) === String(userId));
+        return currentUser ? [currentUser] : [];
+      }
+
+      // IDs das campanhas do usuário
+      const myCampaignIds = myCampaigns.map((campaign: any) => String(campaign.id));
+
+      // Filtrar usuários que estão nas campanhas do usuário
+      const manageableUsers = allUsers.filter(user =>
+        user.campaign_id && myCampaignIds.includes(user.campaign_id)
+      );
+
+      console.log(`👥 Encontrados ${manageableUsers.length} usuários gerenciáveis`);
+      return manageableUsers;
+
+    } catch (error) {
+      console.error('❌ Erro ao buscar usuários gerenciáveis:', error);
+      throw error;
+    }
+  },
+
+
 
   // 🔹 Atualizar campaign_id de um manager
   assignToCampaign: async (userId: string, campaignId: string, invitedBy?: string): Promise<User> => {
@@ -188,59 +242,59 @@ export const userService = {
     }
   },
 
- removeFromCampaign: async (userId: string): Promise<User> => {
+  removeFromCampaign: async (userId: string): Promise<User> => {
     console.log(`=== REMOVING USER FROM CAMPAIGN ===`);
     console.log(`User ID: ${userId}`);
 
     const payload = {
-        campaign_id: null,
-        invited_by: null // Também limpa o invited_by
+      campaign_id: null,
+      invited_by: null // Também limpa o invited_by
     };
 
     console.log('📤 Payload sendo enviado:', payload);
     console.log('🔗 URL:', `api/auth/${userId}`);
 
     try {
-        console.log('🔄 Fazendo requisição PUT...');
-        const response = await api.put(`api/auth/${userId}`, payload);
-        
-        console.log('📥 Resposta do servidor:', response);
-        console.log('✅ Dados retornados:', response.data);
-        
-        // Verificar se os campos foram atualizados corretamente
-        if (response.data) {
-            console.log('🔍 Verificando campos atualizados:');
-            console.log('   campaign_id:', response.data.campaign_id);
-            console.log('   invited_by:', response.data.invited_by);
-            
-            // Verificar se realmente foram limpos
-            if (response.data.campaign_id !== null && response.data.campaign_id !== '') {
-                console.warn('⚠️ campaign_id não foi limpo corretamente!');
-            }
-            if (response.data.invited_by !== null && response.data.invited_by !== '') {
-                console.warn('⚠️ invited_by não foi limpo corretamente!');
-            }
+      console.log('🔄 Fazendo requisição PUT...');
+      const response = await api.put(`api/auth/${userId}`, payload);
+
+      console.log('📥 Resposta do servidor:', response);
+      console.log('✅ Dados retornados:', response.data);
+
+      // Verificar se os campos foram atualizados corretamente
+      if (response.data) {
+        console.log('🔍 Verificando campos atualizados:');
+        console.log('   campaign_id:', response.data.campaign_id);
+        console.log('   invited_by:', response.data.invited_by);
+
+        // Verificar se realmente foram limpos
+        if (response.data.campaign_id !== null && response.data.campaign_id !== '') {
+          console.warn('⚠️ campaign_id não foi limpo corretamente!');
         }
-        
-        console.log(`✅ Usuário ${userId} removido com sucesso`);
-        return response.data;
+        if (response.data.invited_by !== null && response.data.invited_by !== '') {
+          console.warn('⚠️ invited_by não foi limpo corretamente!');
+        }
+      }
+
+      console.log(`✅ Usuário ${userId} removido com sucesso`);
+      return response.data;
     } catch (error: any) {
-        console.error(`❌ Erro ao remover usuário ${userId}:`, error);
-        
-        // Log mais detalhado do erro
-        if (error.response) {
-            console.error('📥 Resposta de erro:', error.response);
-            console.error('📊 Status:', error.response.status);
-            console.error('📝 Dados do erro:', error.response.data);
-        } else if (error.request) {
-            console.error('🌐 Erro de rede:', error.request);
-        } else {
-            console.error('⚡ Erro geral:', error.message);
-        }
-        
-        throw error;
+      console.error(`❌ Erro ao remover usuário ${userId}:`, error);
+
+      // Log mais detalhado do erro
+      if (error.response) {
+        console.error('📥 Resposta de erro:', error.response);
+        console.error('📊 Status:', error.response.status);
+        console.error('📝 Dados do erro:', error.response.data);
+      } else if (error.request) {
+        console.error('🌐 Erro de rede:', error.request);
+      } else {
+        console.error('⚡ Erro geral:', error.message);
+      }
+
+      throw error;
     }
-},
+  },
 
   // 🔹 Buscar managers por campanha
   getManagersByCampaign: async (campaignId: string): Promise<User[]> => {

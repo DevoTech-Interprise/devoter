@@ -246,27 +246,27 @@ const Sidebar = () => {
       icon: <Home size={20} />,
       text: "Dashboard",
       path: "/dashboard",
-      roles: ["admin","manager"]
+      roles: ["admin","manager", "super"]
     },
     {
       type: 'item',
       icon: <Award size={20} />,
       text: "Campanhas",
       path: "/campanhas",
-      roles: ["admin"]
+      roles: ["admin", "super"]
     },
     {
       type: 'item',
       icon: <Send size={20} />,
       text: "Convites",
       path: "/convites",
-      roles: ["admin", "user", "manager"]
+      roles: ["admin", "user", "manager", "super"],
     },
     {
       type: 'submenu',
       icon: <Users size={20} />,
       text: "Redes",
-      roles: ["admin", "user", "manager"],
+      roles: ["admin", "user", "manager", "super"],
       items: [
         {
           icon: <Users size={16} />,
@@ -277,7 +277,7 @@ const Sidebar = () => {
           icon: <Users size={16} />,
           text: "Rede de campanhas",
           path: "/redes-campanhas",
-          roles: ["admin"]
+          roles: ["admin", "super"]
         },
       ]
     },
@@ -286,14 +286,14 @@ const Sidebar = () => {
       icon: <Activity size={20} />,
       text: "Alcançe",
       path: "/alcance-campanhas",
-      roles: ["admin"]
+      roles: ["admin", "super"]
     },
     {
       type: 'item',
       icon: <Users size={20} />,
       text: "Usuarios",
       path: "/usuarios",
-      roles: ["admin"]
+      roles: ["admin", "super"]
     },
   ];
 

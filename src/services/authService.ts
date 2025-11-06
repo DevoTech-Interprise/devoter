@@ -1,7 +1,6 @@
 import api from './api';
 import type { LoginFormData } from '../schemas/auth';
 import { emailService } from './emailService';
-import { userService } from './userService';
 import { passwordRecoveryService } from './passwordRecoveryService';
 
 export const authService = {
@@ -128,11 +127,6 @@ async resetPassword(data: {
     console.log('🔍 [AUTH SERVICE] resetPassword chamado');
     console.log('📋 [AUTH SERVICE] Dados recebidos:', data);
     
-    // 1. Primeiro verifica o código (AGORA COM O TOKEN CORRETO)
-    const verificationResult = await this.verifyResetCode({
-      email: data.email,
-      token: data.token  // ← USA O TOKEN RECEBIDO
-    });
 
     // 2. Busca o ID do usuário nos dados armazenados
     const storedData = localStorage.getItem('recoveryData');

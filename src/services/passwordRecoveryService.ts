@@ -1,6 +1,5 @@
 // src/services/passwordRecoveryService.ts
 import api from './api';
-import { emailService } from './emailService';
 
 // Cache específico para o recovery
 let recoveryToken: string | null = null;
