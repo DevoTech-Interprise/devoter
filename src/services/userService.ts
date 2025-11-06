@@ -37,14 +37,14 @@ export const userService = {
 
     console.log('🔄 Obtendo novo token...');
     const token = await testAuthService.getTestToken();
-    
+
     // Cache o token por 1 hora
     cachedToken = token;
     tokenExpiry = Date.now() + 60 * 60 * 1000;
-    
+
     return token;
   },
-  
+
   // 🔹 Busca todos os usuários
   getAll: async (): Promise<User[]> => {
     const { data } = await api.get('api/auth');
@@ -136,28 +136,111 @@ export const userService = {
   },
 
   // 🔹 Atualizar campaign_id de um manager
-  assignToCampaign: async (userId: string, campaignId: string): Promise<User> => {
-    console.log(`Vinculando usuário ${userId} à campanha ${campaignId}`);
+  assignToCampaign: async (userId: string, campaignId: string, invitedBy?: string): Promise<User> => {
+    console.log(`=== ASSIGNING USER TO CAMPAIGN ===`);
+    console.log(`User ID: ${userId}`);
+    console.log(`Campaign ID: ${campaignId}`);
+    console.log(`Invited By: ${invitedBy}`);
 
-    const { data } = await api.put(`api/auth/${userId}`, {
+    const payload: any = {
       campaign_id: campaignId
-    });
+    };
 
-    console.log(`Usuário ${userId} vinculado com sucesso`);
-    return data;
+    // Adicionar invited_by se fornecido
+    if (invitedBy) {
+      payload.invited_by = invitedBy;
+    }
+
+    console.log('📤 Payload sendo enviado:', payload);
+    console.log('🔗 URL:', `api/auth/${userId}`);
+
+    try {
+      console.log('🔄 Fazendo requisição PUT...');
+      const response = await api.put(`api/auth/${userId}`, payload);
+
+      console.log('📥 Resposta do servidor:', response);
+      console.log('✅ Dados retornados:', response.data);
+
+      // Verificar se os campos foram atualizados corretamente
+      if (response.data) {
+        console.log('🔍 Verificando campos atualizados:');
+        console.log('   campaign_id:', response.data.campaign_id);
+        console.log('   invited_by:', response.data.invited_by);
+      }
+
+      console.log(`✅ Usuário ${userId} vinculado com sucesso`);
+      return response.data;
+    } catch (error: any) {
+      console.error(`❌ Erro ao vincular usuário ${userId}:`, error);
+
+      // Log mais detalhado do erro
+      if (error.response) {
+        console.error('📥 Resposta de erro:', error.response);
+        console.error('📊 Status:', error.response.status);
+        console.error('📝 Dados do erro:', error.response.data);
+      } else if (error.request) {
+        console.error('🌐 Erro de rede:', error.request);
+      } else {
+        console.error('⚡ Erro geral:', error.message);
+      }
+
+      throw error;
+    }
   },
 
-  removeFromCampaign: async (userId: string): Promise<User> => {
-    console.log(`Removendo usuário ${userId} da campanha`);
+ removeFromCampaign: async (userId: string): Promise<User> => {
+    console.log(`=== REMOVING USER FROM CAMPAIGN ===`);
+    console.log(`User ID: ${userId}`);
 
-    const { data } = await api.put(`api/auth/${userId}`, {
-      campaign_id: null
-    });
+    const payload = {
+        campaign_id: null,
+        invited_by: null // Também limpa o invited_by
+    };
 
-    console.log(`Usuário ${userId} removido com sucesso`);
-    return data;
-  },
+    console.log('📤 Payload sendo enviado:', payload);
+    console.log('🔗 URL:', `api/auth/${userId}`);
 
+    try {
+        console.log('🔄 Fazendo requisição PUT...');
+        const response = await api.put(`api/auth/${userId}`, payload);
+        
+        console.log('📥 Resposta do servidor:', response);
+        console.log('✅ Dados retornados:', response.data);
+        
+        // Verificar se os campos foram atualizados corretamente
+        if (response.data) {
+            console.log('🔍 Verificando campos atualizados:');
+            console.log('   campaign_id:', response.data.campaign_id);
+            console.log('   invited_by:', response.data.invited_by);
+            
+            // Verificar se realmente foram limpos
+            if (response.data.campaign_id !== null && response.data.campaign_id !== '') {
+                console.warn('⚠️ campaign_id não foi limpo corretamente!');
+            }
+            if (response.data.invited_by !== null && response.data.invited_by !== '') {
+                console.warn('⚠️ invited_by não foi limpo corretamente!');
+            }
+        }
+        
+        console.log(`✅ Usuário ${userId} removido com sucesso`);
+        return response.data;
+    } catch (error: any) {
+        console.error(`❌ Erro ao remover usuário ${userId}:`, error);
+        
+        // Log mais detalhado do erro
+        if (error.response) {
+            console.error('📥 Resposta de erro:', error.response);
+            console.error('📊 Status:', error.response.status);
+            console.error('📝 Dados do erro:', error.response.data);
+        } else if (error.request) {
+            console.error('🌐 Erro de rede:', error.request);
+        } else {
+            console.error('⚡ Erro geral:', error.message);
+        }
+        
+        throw error;
+    }
+},
 
   // 🔹 Buscar managers por campanha
   getManagersByCampaign: async (campaignId: string): Promise<User[]> => {
@@ -190,28 +273,28 @@ export const userService = {
     try {
       console.log('🔍 Buscando todos os usuários...');
       const allUsers = await userService.getAll();
-      
+
       console.log('📋 Total de usuários encontrados:', allUsers.length);
       console.log('🔎 Procurando email:', email);
-      
+
       const user = allUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
-      
+
       if (user) {
         console.log('✅ Usuário encontrado:', user.id, user.email);
       } else {
         console.log('❌ Usuário não encontrado para email:', email);
         console.log('📧 Emails disponíveis:', allUsers.map(u => u.email));
       }
-      
+
       return user || null;
     } catch (error: any) {
       console.error('❌ Erro ao buscar usuário por email:', error);
-      
+
       // Se for erro de rede
       if (error.message?.includes('Network Error') || error.code === 'NETWORK_ERROR') {
         throw new Error("Erro de conexão ao buscar usuário. Verifique sua internet.");
       }
-      
+
       throw error;
     }
   },

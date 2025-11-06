@@ -41,6 +41,25 @@ const CampaignsPage = () => {
     });
     const [logoPreview, setLogoPreview] = useState<string>('');
 
+    // Função para obter operadores atualmente vinculados à campanha sendo editada
+    const getCurrentCampaignOperators = (): User[] => {
+        if (!editing || !editing.operator) return [];
+
+        const operatorIds = editing.operator.split(',').filter(id => id.trim() !== '');
+        return allManagers.filter(manager =>
+            operatorIds.includes(manager.id) &&
+            manager.campaign_id === editing.id?.toString()
+        );
+    };
+
+    // Função para obter operadores vinculados a outras campanhas
+    const getOtherCampaignOperators = (): User[] => {
+        return allManagers.filter(manager =>
+            manager.campaign_id !== null &&
+            manager.campaign_id !== editing?.id?.toString()
+        );
+    };
+
     // Buscar managers disponíveis (sem campaign_id)
     const fetchAvailableManagers = async () => {
         try {
@@ -48,10 +67,16 @@ const CampaignsPage = () => {
             const available = await userService.getAvailableManagers();
             setAvailableManagers(available);
 
-            // Buscar todos os managers para exibir nomes nos cards
+            // Buscar todos os managers para exibir nomes
             const allUsers = await userService.getAll();
             const allManagerUsers = allUsers.filter(user => user.role === 'manager');
             setAllManagers(allManagerUsers);
+
+            // Se estiver editando, carregar operadores atuais da campanha
+            if (editing) {
+                const currentOperators = await campaignService.getOperators(editing.id);
+                console.log('Operadores atuais da campanha:', currentOperators);
+            }
         } catch (err) {
             console.error('Erro ao carregar managers:', err);
             toast.error('Erro ao carregar lista de operadores');
@@ -124,8 +149,26 @@ const CampaignsPage = () => {
 
     const handleOperatorChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const selectedOptions = Array.from(e.target.selectedOptions, option => option.value);
-        // Converter array para string separada por vírgulas
-        setForm(prev => ({ ...prev, operator: selectedOptions.join(',') }));
+
+        // Se estiver editando, manter os operadores atuais que não foram desmarcados
+        if (editing) {
+            const currentOperatorIds = editing.operator ?
+                editing.operator.split(',').filter(id => id.trim() !== '') : [];
+
+            // Combinar arrays e remover duplicatas
+            const allSelected = [...new Set([...currentOperatorIds, ...selectedOptions])];
+
+            // Filtrar apenas os que ainda estão selecionados
+            const finalSelected = allSelected.filter(id =>
+                selectedOptions.includes(id) ||
+                (currentOperatorIds.includes(id) && selectedOptions.includes(id))
+            );
+
+            setForm(prev => ({ ...prev, operator: finalSelected.join(',') }));
+        } else {
+            // Para criação, usar apenas os selecionados
+            setForm(prev => ({ ...prev, operator: selectedOptions.join(',') }));
+        }
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -150,7 +193,6 @@ const CampaignsPage = () => {
         };
     };
 
-    // No handleSubmit, adicione logs para debug:
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -163,8 +205,20 @@ const CampaignsPage = () => {
             setSubmitting(true);
             const userId = user?.id;
 
+            console.log('=== DEBUG OPERADORES ===');
             console.log('Operadores selecionados:', form.operator);
             console.log('IDs dos operadores:', getSelectedOperatorIds());
+
+            if (editing) {
+                console.log('Operadores anteriores:', editing.operator);
+                console.log('Mudanças:', {
+                    removidos: editing.operator ?
+                        editing.operator.split(',').filter(id => !getSelectedOperatorIds().includes(id)) : [],
+                    adicionados: getSelectedOperatorIds().filter(id =>
+                        !editing.operator?.split(',').includes(id)
+                    )
+                });
+            }
 
             const payload: CampaignPayload = {
                 name: form.name,
@@ -236,7 +290,7 @@ const CampaignsPage = () => {
         }
     };
 
-    // Função para obter nomes dos operadores - CORRIGIDA
+    // Função para obter nomes dos operadores
     const getOperatorNames = (operatorString: string = '') => {
         if (!operatorString) return [];
 
@@ -469,60 +523,113 @@ const CampaignsPage = () => {
                                         />
                                     </div>
 
-                                    {/* Seletor de Operadores */}
+                                    {/* Seletor de Operadores - Inclui disponíveis e já vinculados */}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
                                             <Users className="w-4 h-4 inline mr-2" />
-                                            Operadores (Managers Disponíveis)
+                                            Operadores
                                         </label>
                                         {loadingManagers ? (
                                             <div className="flex items-center gap-2 text-gray-500">
                                                 <Loader2 className="w-4 h-4 animate-spin" />
                                                 Carregando operadores...
                                             </div>
-                                        ) : availableManagers.length === 0 ? (
-                                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                                                Nenhum operador disponível. Todos os managers já estão vinculados a campanhas.
-                                            </p>
                                         ) : (
                                             <>
                                                 <select
                                                     multiple
-                                                    value={getSelectedOperatorIds()} // Array de IDs selecionados
+                                                    value={getSelectedOperatorIds()}
                                                     onChange={handleOperatorChange}
-                                                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 text-gray-900 dark:text-white min-h-[100px]"
-                                                    size={4}
+                                                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 text-gray-900 dark:text-white min-h-[120px]"
+                                                    size={5}
                                                 >
-                                                    {availableManagers.map(manager => (
-                                                        <option key={manager.id} value={manager.id}>
-                                                            {manager.name} - {manager.email}
-                                                        </option>
-                                                    ))}
+                                                    {/* Operadores disponíveis (sem campanha) */}
+                                                    <optgroup label="Operadores Disponíveis">
+                                                        {availableManagers.map(manager => (
+                                                            <option key={manager.id} value={manager.id}>
+                                                                {manager.name} - {manager.email} (Disponível)
+                                                            </option>
+                                                        ))}
+                                                    </optgroup>
+
+                                                    {/* Operadores já vinculados a esta campanha (quando editando) */}
+                                                    {editing && (
+                                                        <optgroup label="Operadores Vinculados a Esta Campanha">
+                                                            {getCurrentCampaignOperators().map(manager => (
+                                                                <option key={manager.id} value={manager.id}>
+                                                                    {manager.name} - {manager.email} (Vinculado)
+                                                                </option>
+                                                            ))}
+                                                        </optgroup>
+                                                    )}
+
+                                                    {/* Operadores vinculados a outras campanhas */}
+                                                    <optgroup label="Operadores em Outras Campanhas">
+                                                        {getOtherCampaignOperators().map(manager => (
+                                                            <option
+                                                                key={manager.id}
+                                                                value={manager.id}
+                                                                disabled={manager.campaign_id !== null && manager.campaign_id !== editing?.id?.toString()}
+                                                            >
+                                                                {manager.name} - {manager.email}
+                                                                {manager.campaign_id && manager.campaign_id !== editing?.id?.toString()
+                                                                    ? ` (Em outra campanha)`
+                                                                    : ''}
+                                                            </option>
+                                                        ))}
+                                                    </optgroup>
                                                 </select>
                                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                                    Mantenha Ctrl (ou Cmd) pressionado para selecionar múltiplos operadores
+                                                    • Mantenha Ctrl (ou Cmd) para selecionar múltiplos<br />
+                                                    • Para remover um operador, desmarque-o da lista<br />
+                                                    • Operadores em outras campanhas não podem ser selecionados
                                                 </p>
                                             </>
                                         )}
+
+                                        {/* Operadores selecionados */}
                                         {getSelectedOperatorIds().length > 0 && (
-                                            <div className="mt-2">
-                                                <p className="text-sm text-gray-600 dark:text-gray-300 mb-1">
-                                                    Operadores selecionados: {getSelectedOperatorIds().length}
+                                            <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                                                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                    Operadores selecionados ({getSelectedOperatorIds().length}):
                                                 </p>
-                                                <div className="flex flex-wrap gap-1">
+                                                <div className="flex flex-wrap gap-2">
                                                     {getSelectedOperatorIds().map(operatorId => {
-                                                        const manager = availableManagers.find(m => m.id === operatorId) ||
-                                                            allManagers.find(m => m.id === operatorId);
+                                                        const manager = allManagers.find(m => m.id === operatorId);
+                                                        const isCurrentlyInThisCampaign = editing &&
+                                                            getCurrentCampaignOperators().some(m => m.id === operatorId);
+                                                        const isAvailable = availableManagers.some(m => m.id === operatorId);
+
                                                         return manager ? (
-                                                            <span
+                                                            <div
                                                                 key={operatorId}
-                                                                className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs rounded-full"
+                                                                className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${isCurrentlyInThisCampaign
+                                                                    ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border border-yellow-300'
+                                                                    : isAvailable
+                                                                        ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border border-green-300'
+                                                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-300'
+                                                                    }`}
                                                             >
                                                                 {manager.name}
-                                                            </span>
+                                                                {isCurrentlyInThisCampaign && (
+                                                                    <span className="text-xs">(atual)</span>
+                                                                )}
+                                                                {!isAvailable && !isCurrentlyInThisCampaign && (
+                                                                    <span className="text-xs">(outra campanha)</span>
+                                                                )}
+                                                            </div>
                                                         ) : null;
                                                     })}
                                                 </div>
+                                            </div>
+                                        )}
+
+                                        {/* Resumo das ações */}
+                                        {editing && (
+                                            <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 space-y-1">
+                                                <p>• <strong>Para adicionar:</strong> Selecione operadores disponíveis</p>
+                                                <p>• <strong>Para remover:</strong> Desmarque operadores vinculados</p>
+                                                <p>• Operadores removidos ficarão disponíveis para outras campanhas</p>
                                             </div>
                                         )}
                                     </div>
