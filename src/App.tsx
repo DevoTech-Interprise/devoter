@@ -19,6 +19,7 @@ import UserProfile from "./pages/profile/UserProfile";
 import ForgotPassword from "./pages/forgotPassword.tsx/ForgotPassword";
 import Terms from "./pages/terms/terms";
 import PrivacyPolicy from "./pages/privacity/privacity";
+import EngagementPage from "./pages/engagement/EngagementPage";
 
 const RootRedirect = () => {
   const token = localStorage.getItem("token");
@@ -126,6 +127,15 @@ function App() {
               element={
                 <PrivateRoute>
                   <UserManagement />
+                </PrivateRoute>
+              }
+            />
+
+            <Route
+              path="/engajamento"
+              element={
+                <PrivateRoute>
+                  <EngagementPage />
                 </PrivateRoute>
               }
             />
