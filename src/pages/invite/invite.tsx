@@ -10,25 +10,31 @@ import { toast, ToastContainer } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import { inviteService } from "../../services/inviteService";
 
-const formSchema = z.object({
-  nome: z.string().min(3, "Nome deve ter pelo menos 3 caracteres"),
-  email: z.string().email("E-mail inválido"),
-  telefone: z.string().min(8, "Telefone inválido"),
-  sexo: z.string().nonempty("Selecione o sexo"),
-  estado: z.string().nonempty("Selecione o estado"),
-  cidade: z.string().nonempty("Selecione a cidade"),
-  bairro: z.string().min(2, "Informe o bairro"),
-  senha: z
-    .string()
-    .min(8, "Senha deve ter no mínimo 8 caracteres")
-    .regex(/[A-Z]/, "Inclua pelo menos uma letra maiúscula")
-    .regex(/[0-9]/, "Inclua pelo menos um número")
-    .regex(/[!@#$%^&*]/, "Inclua pelo menos um símbolo especial"),
-  confirmarSenha: z.string(),
-}).refine((data) => data.senha === data.confirmarSenha, {
-  message: "As senhas não coincidem",
-  path: ["confirmarSenha"],
-});
+const formSchema = z
+  .object({
+    nome: z.string().min(3, "Nome deve ter pelo menos 3 caracteres"),
+    email: z.string().email("E-mail inválido"),
+    telefone: z.string().min(8, "Telefone inválido"),
+    sexo: z.string().nonempty("Selecione o sexo"),
+    estado: z.string().nonempty("Selecione o estado"),
+    cidade: z.string().nonempty("Selecione a cidade"),
+    bairro: z.string().min(2, "Informe o bairro"),
+    senha: z
+      .string()
+      .min(8, "Senha deve ter no mínimo 8 caracteres")
+      .regex(/[A-Z]/, "Inclua pelo menos uma letra maiúscula")
+      .regex(/[0-9]/, "Inclua pelo menos um número")
+      .regex(/[!@#$%^&*]/, "Inclua pelo menos um símbolo especial"),
+    confirmarSenha: z.string(),
+    aceiteTermos: z.boolean().refine((val) => val === true, {
+      message: "É necessário aceitar os Termos de Uso e a Política de Privacidade",
+    }),
+  })
+  .refine((data) => data.senha === data.confirmarSenha, {
+    message: "As senhas não coincidem",
+    path: ["confirmarSenha"],
+  });
+
 
 type FormType = z.infer<typeof formSchema>;
 
@@ -126,11 +132,17 @@ const Invites = () => {
   const handleBack = () => setStep((prev) => prev - 1);
 
   const onSubmit = async (data: FormType) => {
+    if (!data.aceiteTermos) {
+      toast.warning("Você precisa aceitar os Termos de Uso e a Política de Privacidade!");
+      return;
+    }
     try {
       const inviteToken = inviteLink.split("/").pop();
       if (!inviteToken) {
         throw new Error("Token de convite não encontrado");
       }
+
+
 
       const formattedData = {
         name: data.nome,
@@ -375,7 +387,6 @@ const Invites = () => {
               </motion.div>
             )}
 
-            {/* Etapa 3 */}
             {step === 3 && (
               <motion.div
                 key="step3"
@@ -401,6 +412,40 @@ const Invites = () => {
                   error={errors.confirmarSenha?.message}
                   campaign={campaign}
                 />
+
+                {/* ✅ Checkbox de aceite dos termos */}
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    id="aceiteTermos"
+                    {...register("aceiteTermos")}
+                    className="mt-1 w-5 h-5 cursor-pointer accent-blue-600"
+                  />
+                  <label htmlFor="aceiteTermos" className="text-sm text-gray-700 dark:text-gray-300 leading-snug">
+                    Eu li e concordo com os{" "}
+                    <a
+                      href="/termos"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline text-blue-600 hover:text-blue-700"
+                    >
+                      Termos de Uso
+                    </a>{" "}
+                    e a{" "}
+                    <a
+                      href="/privacidade"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline text-blue-600 hover:text-blue-700"
+                    >
+                      Política de Privacidade
+                    </a>.
+                  </label>
+                </div>
+                {errors.aceiteTermos && (
+                  <p className="text-red-500 text-sm">{errors.aceiteTermos.message}</p>
+                )}
+
                 <div className="flex justify-between gap-3">
                   <button
                     type="button"

@@ -17,6 +17,8 @@ import AlcancePage from "./pages/range/range";
 import UserManagement from "./pages/user/users";
 import UserProfile from "./pages/profile/UserProfile";
 import ForgotPassword from "./pages/forgotPassword.tsx/ForgotPassword";
+import Terms from "./pages/terms/terms";
+import PrivacyPolicy from "./pages/privacity/privacity";
 
 const RootRedirect = () => {
   const token = localStorage.getItem("token");
@@ -55,6 +57,8 @@ function App() {
             <Route path="/" element={<RootRedirect />} />
             <Route path="/login" element={<Login />} />
             <Route path="/esqueci-a-senha" element={<ForgotPassword />} />
+            <Route path="/termos" element={<Terms />} />
+            <Route path="/privacidade" element={<PrivacyPolicy />} />
 
             {/* Páginas privadas */}
             <Route
