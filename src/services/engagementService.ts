@@ -1,5 +1,5 @@
 // services/engagementService.ts
-import api from './api';
+
 import { userService, type User } from './userService';
 
 export interface EngagementAction {

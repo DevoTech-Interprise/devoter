@@ -1,4 +1,4 @@
-// src/pages/engagement/EngagementPage.tsx
+
 import { useState, useEffect } from 'react';
 import {
   Users,
@@ -10,16 +10,11 @@ import {
   Filter,
   BarChart3,
   Send,
-  Eye,
-  Edit,
   Trash2,
   Copy,
   CheckCircle,
   Clock,
-  XCircle,
   MapPin,
-  Phone,
-  Mail,
   X
 } from 'lucide-react';
 import Sidebar from '../../components/Sidebar';
@@ -27,7 +22,7 @@ import Header from '../../components/Header';
 import { useTheme } from '../../context/ThemeContext';
 import { useUser } from '../../context/UserContext';
 import { engagementService, type EngagementAction, type EngagementStats } from '../../services/engagementService';
-import { userService, type User } from '../../services/userService';
+import { type User } from '../../services/userService';
 import { campaignService, type Campaign } from '../../services/campaignService';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';

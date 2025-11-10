@@ -1,15 +1,15 @@
+// src/contexts/UserContext.tsx
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import { userService, type User as UserServiceType } from '../services/userService';
-
-// Use a mesma interface do userService
-type User = UserServiceType;
+import { userService, type User } from '../services/userService';
 
 type UserContextType = {
   user: User | null;
   setUser: (user: User | null) => void;
-  updateCampaign: (campaignId: string | null) => Promise<void>; // Alterado para string | null
+  updateCampaign: (campaignId: string | null) => Promise<void>;
   refreshUser: () => Promise<void>;
   clearUser: () => void;
+  isLoading: boolean;
+  isAuthenticated: boolean;
 };
 
 const UserContext = createContext<UserContextType>({
@@ -18,30 +18,71 @@ const UserContext = createContext<UserContextType>({
   updateCampaign: async () => {},
   refreshUser: async () => {},
   clearUser: () => {},
+  isLoading: true,
+  isAuthenticated: false,
 });
 
-export const useUser = () => useContext(UserContext);
+export const useUser = () => {
+  const context = useContext(UserContext);
+  if (!context) {
+    throw new Error('useUser must be used within a UserProvider');
+  }
+  return context;
+};
 
 export const UserProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(() => {
-    // Verificar se há um token válido antes de carregar o usuário do localStorage
-    const token = localStorage.getItem('token');
-    if (!token) {
-      localStorage.removeItem('user');
-      return null;
-    }
-    
-    const stored = localStorage.getItem('user');
-    if (stored) {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const isAuthenticated = !!user;
+
+  // Carregar usuário do localStorage e validar com a API
+  useEffect(() => {
+    const loadUserFromStorage = async () => {
+      setIsLoading(true);
+      
       try {
-        return JSON.parse(stored);
-      } catch {
-        localStorage.removeItem('user');
-        return null;
+        const token = localStorage.getItem('token');
+        if (!token) {
+          localStorage.removeItem('user');
+          return;
+        }
+        
+        const stored = localStorage.getItem('user');
+        if (stored) {
+          try {
+            const parsedUser = JSON.parse(stored);
+            
+            // Verificar se o usuário ainda é válido na API
+            if (parsedUser?.id) {
+              try {
+                const userData = await userService.getById(parsedUser.id);
+                const updatedUser = { ...parsedUser, ...userData };
+                setUser(updatedUser);
+                localStorage.setItem('user', JSON.stringify(updatedUser));
+                console.log('✅ Usuário carregado e validado:', updatedUser.email);
+              } catch (error) {
+                console.error('❌ Token inválido ou usuário não encontrado:', error);
+                // Token expirado ou usuário não existe mais
+                clearUser();
+              }
+            } else {
+              localStorage.removeItem('user');
+            }
+          } catch (parseError) {
+            console.error('❌ Erro ao parsear usuário do localStorage:', parseError);
+            localStorage.removeItem('user');
+          }
+        }
+      } catch (error) {
+        console.error('❌ Erro ao carregar usuário do storage:', error);
+        clearUser();
+      } finally {
+        setIsLoading(false);
       }
-    }
-    return null;
-  });
+    };
+
+    loadUserFromStorage();
+  }, []);
 
   // Sincronizar com mudanças no localStorage (para quando fizer logout em outra aba)
   useEffect(() => {
@@ -69,68 +110,78 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
-  // Verificar token válido ao inicializar
-  useEffect(() => {
-    const checkTokenValidity = async () => {
-      const token = localStorage.getItem('token');
-      if (!token && user) {
-        // Token foi removido mas usuário ainda está no estado
-        setUser(null);
-        localStorage.removeItem('user');
-        return;
-      }
-
-      if (token && user?.id) {
-        try {
-          // Verificar se o usuário ainda é válido
-          await userService.getById(user.id);
-        } catch (error) {
-          // Se falhar, limpar usuário (token pode estar expirado)
-          console.error('Token inválido ou usuário não encontrado:', error);
-          setUser(null);
-          localStorage.removeItem('user');
-          localStorage.removeItem('token');
-        }
-      }
-    };
-
-    checkTokenValidity();
-  }, [user]);
-
   const clearUser = () => {
     setUser(null);
     localStorage.removeItem('user');
+    localStorage.removeItem('token');
+    console.log('✅ Usuário limpo do contexto e localStorage');
+    
+    // Disparar evento de logout
+    window.dispatchEvent(new CustomEvent('userLoggedOut'));
   };
 
   const refreshUser = async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      console.warn('⚠️ Tentativa de refresh sem usuário logado');
+      return;
+    }
+    
+    setIsLoading(true);
     try {
+      console.log('🔄 Atualizando dados do usuário...');
       const userData = await userService.getById(user.id);
       const updatedUser = { ...user, ...userData };
       setUser(updatedUser);
       localStorage.setItem('user', JSON.stringify(updatedUser));
+      console.log('✅ Dados do usuário atualizados:', updatedUser.email);
     } catch (err) {
-      console.error('Erro ao atualizar dados do usuário:', err);
+      console.error('❌ Erro ao atualizar dados do usuário:', err);
       // Se falhar ao atualizar, pode ser que o token esteja inválido
       clearUser();
+      throw err;
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const updateCampaign = async (campaignId: string | null) => { // Alterado para string | null
-    if (!user) return;
+  const updateCampaign = async (campaignId: string | null) => {
+    if (!user) {
+      throw new Error('Usuário não autenticado');
+    }
+    
+    setIsLoading(true);
     try {
-      await userService.update(user.id, { campaign_id: campaignId });
-      const updatedUser = { ...user, campaign_id: campaignId };
+      console.log(`🔄 Atualizando campanha do usuário para: ${campaignId}`);
+      
+      // Usar o método assignToCampaign ou removeFromCampaign do userService
+      let updatedUser: User;
+      
+      if (campaignId) {
+        // Atribuir à campanha
+        updatedUser = await userService.assignToCampaign(user.id, campaignId);
+      } else {
+        // Remover da campanha
+        updatedUser = await userService.removeFromCampaign(user.id);
+      }
+      
       setUser(updatedUser);
       localStorage.setItem('user', JSON.stringify(updatedUser));
       
+      console.log(`✅ Campanha atualizada para: ${campaignId}`);
+      
       // Disparar evento personalizado para notificar outros componentes
       window.dispatchEvent(new CustomEvent('campaignChanged', { 
-        detail: { campaignId } 
+        detail: { 
+          campaignId,
+          userId: user.id,
+          userName: user.name
+        } 
       }));
     } catch (err) {
-      console.error('Erro ao atualizar campanha:', err);
+      console.error('❌ Erro ao atualizar campanha:', err);
       throw err;
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -139,19 +190,29 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     if (newUser) {
       setUser(newUser);
       localStorage.setItem('user', JSON.stringify(newUser));
+      console.log('✅ Usuário definido no contexto:', newUser.email);
+      
+      // Disparar evento de login
+      window.dispatchEvent(new CustomEvent('userLoggedIn', { 
+        detail: { user: newUser } 
+      }));
     } else {
       clearUser();
     }
   };
 
+  const value = {
+    user, 
+    setUser: setUserSafe, 
+    updateCampaign, 
+    refreshUser,
+    clearUser,
+    isLoading,
+    isAuthenticated,
+  };
+
   return (
-    <UserContext.Provider value={{ 
-      user, 
-      setUser: setUserSafe, 
-      updateCampaign, 
-      refreshUser,
-      clearUser 
-    }}>
+    <UserContext.Provider value={value}>
       {children}
     </UserContext.Provider>
   );

@@ -21,6 +21,10 @@ import Terms from "./pages/terms/terms";
 import PrivacyPolicy from "./pages/privacity/privacity";
 import EngagementPage from "./pages/engagement/EngagementPage";
 
+import { NewsList } from './pages/news/NewsList';
+import { NewsForm } from './pages/news/NewsForm';
+import { NewsDetail } from './pages/news/NewsDetail';
+
 const RootRedirect = () => {
   const token = localStorage.getItem("token");
 
@@ -52,7 +56,7 @@ function App() {
             pauseOnHover
             theme="colored"
           />
-          
+
           <Routes>
             {/* Páginas públicas */}
             <Route path="/" element={<RootRedirect />} />
@@ -139,6 +143,11 @@ function App() {
                 </PrivateRoute>
               }
             />
+
+            <Route path="/news" element={<NewsList />} />
+            <Route path="/news/create" element={<NewsForm />} />
+            <Route path="/news/edit/:id" element={<NewsForm />} />
+            <Route path="/news/:id" element={<NewsDetail />} />
 
             <Route path="/perfil" element={<UserProfile />} />
 

@@ -7,7 +7,7 @@ import { toast } from "react-toastify";
 import { ArrowLeft, Mail, Lock, CheckCircle, Eye, EyeOff } from "lucide-react";
 import { useTheme } from "../../context/ThemeContext";
 import { authService } from "../../services/authService";
-import { usePasswordRecovery } from "../hooks/usePasswordRecovery";
+import { passwordRecoveryService } from "../../services/passwordRecoveryService";
 import {
     forgotPasswordSchema,
     resetPasswordSchema,
@@ -20,9 +20,6 @@ type Step = 'email' | 'verify' | 'reset';
 const ForgotPassword: React.FC = () => {
     const navigate = useNavigate();
     const { darkMode, colors } = useTheme();
-    const {
-        recoveryReady,
-    } = usePasswordRecovery();
 
     const [currentStep, setCurrentStep] = useState<Step>('email');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -30,7 +27,7 @@ const ForgotPassword: React.FC = () => {
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [userEmail, setUserEmail] = useState("");
     const [userId, setUserId] = useState<string | null>(null);
-    const [verificationToken, setVerificationToken] = useState<string>(""); // NOVO ESTADO
+    const [verificationToken, setVerificationToken] = useState<string>("");
 
     // Formulário para solicitar redefinição
     const {
@@ -59,23 +56,24 @@ const ForgotPassword: React.FC = () => {
 
     // Solicitar código de verificação
     const handleSendCode = async (data: ForgotPasswordFormData) => {
-        if (!recoveryReady) {
-            setEmailError("root", {
-                type: "manual",
-                message: "Sistema de recuperação não está pronto. Tente novamente."
-            });
-            return;
-        }
-
         setIsSubmitting(true);
         clearEmailErrors();
 
         try {
             console.log('🔄 [Page] Iniciando envio de código para:', data.email);
+            
+            // Verifica se o usuário existe usando o novo service
+            const user = await passwordRecoveryService.getUserByEmailForRecovery(data.email);
+            
+            if (!user) {
+                throw new Error("Email não encontrado em nossa base de dados.");
+            }
+
+            // Se o usuário existe, prossegue com o envio do código
             const response = await authService.forgotPassword(data);
 
             setUserEmail(data.email);
-            setUserId(response.userId);
+            setUserId(user.id); // Usa o ID do usuário encontrado
             setCurrentStep('verify');
 
             toast.success("Código de verificação enviado para seu email!");
@@ -105,7 +103,7 @@ const ForgotPassword: React.FC = () => {
             });
 
             setUserId(response.userId);
-            setVerificationToken(token); // SALVA O TOKEN
+            setVerificationToken(token);
             setCurrentStep('reset');
 
             toast.success("Código verificado com sucesso!");
@@ -113,7 +111,6 @@ const ForgotPassword: React.FC = () => {
             console.error('❌ [Page] Erro na verificação:', error);
             toast.error(error.message || "Código inválido ou expirado.");
 
-            // Mantém na etapa de verificação
             setCurrentStep('verify');
         } finally {
             setIsSubmitting(false);
@@ -122,14 +119,6 @@ const ForgotPassword: React.FC = () => {
 
     // Redefinir senha
     const handleResetPassword = async (data: ResetPasswordFormData) => {
-        if (!recoveryReady) {
-            setResetError("root", {
-                type: "manual",
-                message: "Sistema de recuperação não está pronto. Tente novamente."
-            });
-            return;
-        }
-
         setIsSubmitting(true);
         clearResetErrors();
 
@@ -144,11 +133,8 @@ const ForgotPassword: React.FC = () => {
 
             console.log('🔄 [Page] Redefinindo senha para usuário:', userId);
 
-            await authService.resetPassword({
-                ...data,
-                email: userEmail,
-                token: verificationToken
-            });
+            // Usa o novo service para atualizar a senha
+            await passwordRecoveryService.updatePasswordForRecovery(userId, data.newPassword);
 
             // TOAST COM CONFIGURAÇÃO EXPLÍCITA
             toast.success("Senha redefinida com sucesso!", {
@@ -163,7 +149,7 @@ const ForgotPassword: React.FC = () => {
 
             console.log('✅ [DEBUG] Toast de sucesso disparado');
 
-            // Aguarda um pouco MAIS para garantir que o toast seja visto
+            // Aguarda um pouco para garantir que o toast seja visto
             setTimeout(() => {
                 console.log('📍 [DEBUG] Navegando para /login');
 
@@ -173,7 +159,7 @@ const ForgotPassword: React.FC = () => {
                 setVerificationToken("");
 
                 navigate("/login");
-            }, 2000); // Aumentei para 2 segundos
+            }, 2000);
 
         } catch (error: any) {
             console.error('❌ [Page] Erro no reset de senha:', error);
@@ -195,6 +181,63 @@ const ForgotPassword: React.FC = () => {
             });
 
             setCurrentStep('reset');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    // Método alternativo usando o processo completo do service
+    const handleDirectPasswordReset = async (data: ResetPasswordFormData) => {
+        setIsSubmitting(true);
+        clearResetErrors();
+
+        try {
+            console.log('🔄 [Page] Processo direto de recuperação para:', userEmail);
+
+            // Usa o método unificado do service
+            const success = await passwordRecoveryService.processPasswordRecovery(
+                userEmail,
+                data.newPassword
+            );
+
+            if (success) {
+                toast.success("Senha redefinida com sucesso!", {
+                    position: "top-right",
+                    autoClose: 5000,
+                    hideProgressBar: false,
+                    closeOnClick: true,
+                    pauseOnHover: true,
+                    draggable: true,
+                    theme: darkMode ? "dark" : "light",
+                });
+
+                setTimeout(() => {
+                    setUserEmail("");
+                    setUserId(null);
+                    setVerificationToken("");
+                    navigate("/login");
+                }, 2000);
+            } else {
+                throw new Error("Usuário não encontrado");
+            }
+
+        } catch (error: any) {
+            console.error('❌ [Page] Erro no processo direto:', error);
+            
+            toast.error(error.message || "Erro ao redefinir senha. Tente novamente.", {
+                position: "top-right",
+                autoClose: 5000,
+                hideProgressBar: false,
+                closeOnClick: true,
+                pauseOnHover: true,
+                draggable: true,
+                theme: darkMode ? "dark" : "light",
+            });
+
+            setResetError("root", {
+                type: "manual",
+                message: error.message || "Erro ao redefinir senha. Tente novamente."
+            });
         } finally {
             setIsSubmitting(false);
         }
@@ -271,7 +314,7 @@ const ForgotPassword: React.FC = () => {
                             setCode(["", "", "", "", "", ""]);
                             handleSendCode({ email: userEmail });
                         }}
-                        disabled={isSubmitting || !recoveryReady}
+                        disabled={isSubmitting}
                         className="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {isSubmitting ? 'Enviando...' : 'Reenviar código'}
@@ -327,35 +370,11 @@ const ForgotPassword: React.FC = () => {
                         {currentStep === 'verify' && "Digite o código de verificação"}
                         {currentStep === 'reset' && "Crie sua nova senha"}
                     </p>
-
-                    {/* Status do sistema de recovery
-          <div className="mt-2">
-            {recoveryLoading && (
-              <p className="text-xs text-yellow-200 flex items-center justify-center">
-                <RefreshCw className="w-3 h-3 animate-spin mr-1" />
-                Conectando sistema...
-              </p>
-            )}
-            {recoveryError && (
-              <div className="text-xs text-red-200">
-                <p> Erro no sistema</p>
-                <button
-                  onClick={handleRetryRecovery}
-                  className="underline hover:text-red-300 text-xs mt-1"
-                >
-                  Tentar novamente
-                </button>
-              </div>
-            )}
-            {recoveryReady && !recoveryLoading && (
-              <p className="text-xs text-green-200"> Sistema pronto</p>
-            )}
-          </div> */}
                 </div>
 
                 {/* PROGRESS STEPS */}
                 <div className="px-8 pt-6">
-                    <div className="flex items-center justify-center space-x-2"> {/* Adicionei space-x-2 */}
+                    <div className="flex items-center justify-center space-x-2">
                         {['email', 'verify', 'reset'].map((step, index) => {
                             const stepStatus = getStepStatus(step as Step);
 
@@ -432,7 +451,7 @@ const ForgotPassword: React.FC = () => {
                                 {/* BOTÃO PARA STEP 1 */}
                                 <button
                                     type="submit"
-                                    disabled={isSubmitting || !recoveryReady}
+                                    disabled={isSubmitting}
                                     className="w-full rounded-lg px-4 py-2 font-semibold text-white transition disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
                                     style={{ backgroundColor: colors.primary }}
                                 >
@@ -574,7 +593,7 @@ const ForgotPassword: React.FC = () => {
                                 {/* BOTÃO PARA STEP 3 */}
                                 <button
                                     type="submit"
-                                    disabled={isSubmitting || !recoveryReady}
+                                    disabled={isSubmitting}
                                     className="w-full rounded-lg px-4 py-2 font-semibold text-white transition disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
                                     style={{ backgroundColor: colors.primary }}
                                 >

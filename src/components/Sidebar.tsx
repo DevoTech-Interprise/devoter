@@ -12,6 +12,7 @@ import {
   Sun,
   ChevronDown,
   ChevronRight,
+  Newspaper as News
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTheme } from "../context/ThemeContext";
@@ -295,6 +296,14 @@ const Sidebar = () => {
       path: "/usuarios",
       roles: ["admin", "super"]
     },
+    {
+      type: 'item',
+      icon: <News size={20} />,
+      text: "Noticias",
+      path: "/news",
+      roles: ["admin", "super","manager", "user"]
+    },
+
   ];
 
   // Filtrar itens baseado na role do usuário do contexto
@@ -337,7 +346,7 @@ const Sidebar = () => {
 
       {/* Sidebar */}
       <aside
-        className={`fixed md:static z-50 h-full transition-all duration-300 flex flex-col
+        className={`fixed md:static z-50 h-full md:h-auto transition-all duration-300 flex flex-col
           ${darkMode ? "bg-gray-900 border-gray-700" : "bg-white border-gray-200"}
           ${isOpen ? "w-64" : "w-20"}
           ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
