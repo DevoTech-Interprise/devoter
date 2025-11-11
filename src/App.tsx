@@ -25,6 +25,10 @@ import { NewsList } from './pages/news/NewsList';
 import { NewsForm } from './pages/news/NewsForm';
 import { NewsDetail } from './pages/news/NewsDetail';
 
+import { ScheduleCalendar } from './pages/schedule/ScheduleCalendar';
+import { ScheduleForm } from './pages/schedule/ScheduleForm';
+import { ScheduleDetail } from './pages/schedule/ScheduleDetail';
+
 const RootRedirect = () => {
   const token = localStorage.getItem("token");
 
@@ -148,6 +152,11 @@ function App() {
             <Route path="/news/create" element={<NewsForm />} />
             <Route path="/news/edit/:id" element={<NewsForm />} />
             <Route path="/news/:id" element={<NewsDetail />} />
+
+            <Route path="/schedule" element={<ScheduleCalendar />} />
+            <Route path="/schedule/create" element={<ScheduleForm />} />
+            <Route path="/schedule/edit/:id" element={<ScheduleForm />} />
+            <Route path="/schedule/:id" element={<ScheduleDetail />} />
 
             <Route path="/perfil" element={<UserProfile />} />
 
