@@ -302,7 +302,7 @@ const Sidebar = () => {
       icon: <News size={20} />,
       text: "Noticias",
       path: "/news",
-      roles: ["super"]
+      roles: ["super","user","admin","manager"]
     },
     {
       type: 'item',

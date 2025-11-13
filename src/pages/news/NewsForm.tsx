@@ -8,17 +8,18 @@ import {
   ArrowLeft, 
   Save, 
   Upload, 
-  Image as ImageIcon,
   Eye,
   EyeOff,
   Calendar,
-  User
+  User,
+  Building
 } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { useNews } from '../../pages/hooks/useNews';
 import { useUser } from '../../context/UserContext';
 import { TinyMCEEditor } from '../../components/TinyMCEEditor';
 import { newsSchema, type NewsFormData } from '../../schemas/news';
+import { campaignService, type Campaign } from '../../services/campaignService';
 import Sidebar from '../../components/Sidebar';
 
 export const NewsForm: React.FC = () => {
@@ -36,13 +37,16 @@ export const NewsForm: React.FC = () => {
   } = useNews();
 
   const [imagePreview, setImagePreview] = useState<string>('');
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [currentNews, setCurrentNews] = useState<any>(null);
+  const [editorContent, setEditorContent] = useState<string>('');
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [isLoadingCampaigns, setIsLoadingCampaigns] = useState(false);
 
   const isEditing = !!id;
 
-  // Corrigir o campaign_id para string | undefined
   const getDefaultCampaignId = (): string | undefined => {
     return user?.campaign_id || undefined;
   };
@@ -53,36 +57,81 @@ export const NewsForm: React.FC = () => {
     formState: { errors },
     setValue,
     watch,
-    reset
+    trigger,
+    formState
   } = useForm<NewsFormData>({
     resolver: zodResolver(newsSchema),
     defaultValues: {
       title: '',
-      body: '',
-      image: '',
+      preview: '',
+      content: '',
+      image: undefined,
       campaign_id: getDefaultCampaignId()
     }
   });
 
-  const watchedImage = watch('image');
-  const watchedBody = watch('body');
   const watchedTitle = watch('title');
+  const watchedPreview = watch('preview');
+  const watchedCampaignId = watch('campaign_id');
+
+  // Carregar campanhas do usuário
+  useEffect(() => {
+    const loadUserCampaigns = async () => {
+      if (!user) return;
+
+      setIsLoadingCampaigns(true);
+      try {
+        const userCampaigns = await campaignService.getMyCampaigns(user.id, user.role);
+        setCampaigns(userCampaigns);
+        
+        console.log(`Carregadas ${userCampaigns.length} campanhas para o usuário ${user.name} (${user.role})`);
+        
+        // Se for edição e ainda não carregou a notícia, mas temos campanhas,
+        // podemos tentar pré-selecionar baseado no user.campaign_id
+        if (!isEditing && user.campaign_id) {
+          const userActiveCampaign = userCampaigns.find(camp => 
+            String(camp.id) === String(user.campaign_id)
+          );
+          if (userActiveCampaign) {
+            setValue('campaign_id', String(userActiveCampaign.id));
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao carregar campanhas:', err);
+        toast.error('Erro ao carregar lista de campanhas');
+      } finally {
+        setIsLoadingCampaigns(false);
+      }
+    };
+
+    loadUserCampaigns();
+  }, [user, isEditing, setValue]);
 
   // Carregar notícia se estiver editando
   useEffect(() => {
-    if (id) {
+    if (id && !currentNews) {
       const loadNews = async () => {
         try {
           const newsItem = await getNewsById(id);
           if (newsItem) {
             setCurrentNews(newsItem);
-            reset({
-              title: newsItem.title,
-              body: newsItem.body,
-              image: newsItem.image,
-              // Corrigir o campaign_id para string | undefined
-              campaign_id: newsItem.campaign_id ? String(newsItem.campaign_id) : undefined
-            });
+            setEditorContent(newsItem.content || '');
+            
+            // Apenas set valores básicos, sem usar reset completo
+            setValue('title', newsItem.title);
+            setValue('preview', newsItem.preview);
+            setValue('content', newsItem.content);
+            
+            // Definir a campanha - se a notícia tiver campaign_id, usar ela,
+            // senão usar a campanha ativa do usuário
+            if (newsItem.campaign_id) {
+              setValue('campaign_id', String(newsItem.campaign_id));
+            } else if (user?.campaign_id) {
+              setValue('campaign_id', user.campaign_id);
+            } else {
+              setValue('campaign_id', '');
+            }
+            
             if (newsItem.image) {
               setImagePreview(newsItem.image);
             }
@@ -95,35 +144,48 @@ export const NewsForm: React.FC = () => {
 
       loadNews();
     }
-  }, [id, getNewsById, reset, navigate]);
+  }, [id, getNewsById, navigate, currentNews, setValue, user]);
 
-  // Atualizar image preview quando a URL da imagem mudar
-  useEffect(() => {
-    if (watchedImage) {
-      setImagePreview(watchedImage);
-    }
-  }, [watchedImage]);
-
-  // Limpar erro quando o componente desmontar ou quando navegar
+  // Limpar erro quando o componente desmontar
   useEffect(() => {
     return () => {
       clearError();
     };
   }, [clearError]);
 
+  // Atualizar o valor do content no react-hook-form quando editorContent mudar
+  useEffect(() => {
+    setValue('content', editorContent, { shouldValidate: true });
+  }, [editorContent, setValue]);
+
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // Em uma implementação real, você faria upload para um servidor
-      // Aqui estamos apenas criando uma URL local para preview
+      // Validar tipo de arquivo
+      const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!validTypes.includes(file.type)) {
+        toast.error('Tipo de arquivo não suportado. Use JPEG, PNG ou WebP.');
+        return;
+      }
+
+      // Validar tamanho (5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('A imagem deve ter no máximo 5MB.');
+        return;
+      }
+
+      setImageFile(file);
       const imageUrl = URL.createObjectURL(file);
       setImagePreview(imageUrl);
-      setValue('image', imageUrl);
+      setValue('image', file, { shouldValidate: true });
+      
+      // Limpar o input file para permitir selecionar o mesmo arquivo novamente
+      event.target.value = '';
     }
   };
 
-  const handleBodyChange = (content: string) => {
-    setValue('body', content, { shouldValidate: true });
+  const handleContentChange = (content: string) => {
+    setEditorContent(content);
   };
 
   const onSubmit = async (data: NewsFormData) => {
@@ -132,6 +194,23 @@ export const NewsForm: React.FC = () => {
       return;
     }
 
+    console.log('Dados do formulário:', data);
+    console.log('Conteúdo do editor:', editorContent);
+
+    // Verificar se o conteúdo está vazio
+    if (!editorContent || editorContent.replace(/<[^>]*>/g, '').trim().length === 0) {
+      toast.error('O conteúdo da notícia é obrigatório');
+      return;
+    }
+
+    // Combinar dados do formulário com conteúdo do editor
+    const finalData = {
+      ...data,
+      content: editorContent
+    };
+
+    console.log('Dados finais enviados:', finalData);
+
     setIsSubmitting(true);
     clearError();
 
@@ -139,14 +218,16 @@ export const NewsForm: React.FC = () => {
       let success: boolean;
 
       if (isEditing) {
-        success = await updateNews(id!, data);
+        console.log('Atualizando notícia:', id);
+        success = await updateNews(id!, finalData);
         if (success) {
           toast.success('Notícia atualizada com sucesso!');
         } else {
           throw new Error('Falha ao atualizar notícia');
         }
       } else {
-        success = await createNews(data);
+        console.log('Criando nova notícia');
+        success = await createNews(finalData);
         if (success) {
           toast.success('Notícia criada com sucesso!');
         } else {
@@ -171,39 +252,78 @@ export const NewsForm: React.FC = () => {
     }
   };
 
+  const removeImage = () => {
+    setImagePreview('');
+    setImageFile(null);
+    setValue('image', undefined);
+  };
+
+  // Função para debug - verificar se o botão está funcionando
+  const handleButtonClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    console.log('Botão clicado!');
+    console.log('FormState isValid:', formState.isValid);
+    console.log('FormState errors:', formState.errors);
+    console.log('Editor content:', editorContent);
+    
+    // Disparar validação manualmente
+    trigger().then(isValid => {
+      console.log('Validação result:', isValid);
+      if (isValid) {
+        handleSubmit(onSubmit)();
+      } else {
+        toast.error('Por favor, preencha todos os campos obrigatórios corretamente.');
+      }
+    });
+  };
+
+  // Obter campanha selecionada para mostrar informações
+  const selectedCampaign = watchedCampaignId ? 
+    campaigns.find(camp => String(camp.id) === String(watchedCampaignId)) : null;
+
   // Preview da notícia
   const renderPreview = () => (
-    <div className={`rounded-lg border p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-      <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">
+    <div className={`rounded-lg border p-4 sm:p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+      <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-gray-900 dark:text-white">
         {watchedTitle || 'Título da Notícia'}
       </h2>
       
       {imagePreview && (
-        <div className="mb-4">
+        <div className="mb-3 sm:mb-4">
           <img 
             src={imagePreview} 
             alt="Preview" 
-            className="w-full h-64 object-cover rounded-lg"
+            className="w-full h-40 sm:h-64 object-cover rounded-lg"
           />
         </div>
       )}
 
+      <p className="text-gray-600 dark:text-gray-300 text-base sm:text-lg mb-3 sm:mb-4">
+        {watchedPreview || 'Preview da notícia...'}
+      </p>
+
       <div 
-        className="prose prose-lg max-w-none dark:prose-invert"
-        dangerouslySetInnerHTML={{ __html: watchedBody || '<p>Conteúdo da notícia...</p>' }}
+        className="text-gray-700 dark:text-gray-300 prose prose-sm sm:prose-base lg:prose-lg max-w-none dark:prose-invert"
+        dangerouslySetInnerHTML={{ __html: editorContent || '<p>Conteúdo da notícia...</p>' }}
       />
 
-      <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-        <div className="flex items-center justify-between text-sm text-gray-500 dark:text-gray-400">
-          <div className="flex items-center space-x-4">
+      <div className="mt-4 sm:mt-6 pt-3 sm:pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs sm:text-sm text-gray-500 dark:text-gray-400 gap-2">
+          <div className="flex items-center space-x-3 sm:space-x-4">
             <div className="flex items-center">
-              <User className="w-4 h-4 mr-1" />
+              <User className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
               <span>{user?.name || 'Autor'}</span>
             </div>
             <div className="flex items-center">
-              <Calendar className="w-4 h-4 mr-1" />
+              <Calendar className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
               <span>{new Date().toLocaleDateString('pt-BR')}</span>
             </div>
+            {selectedCampaign && (
+              <div className="flex items-center">
+                <Building className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                <span>{selectedCampaign.name}</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -212,12 +332,12 @@ export const NewsForm: React.FC = () => {
 
   if (isEditing && !currentNews && !loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center p-4">
         <div className="text-center">
-          <p className="text-red-500 text-lg">Notícia não encontrada</p>
+          <p className="text-red-500 text-lg mb-4">Notícia não encontrada</p>
           <button 
             onClick={() => navigate('/news')}
-            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm sm:text-base"
           >
             Voltar para Notícias
           </button>
@@ -227,86 +347,93 @@ export const NewsForm: React.FC = () => {
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900 ">
+    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Sidebar */}
       <Sidebar/>
       
       {/* Main Content */}
-      <div className="flex-1 "> 
-        <div className="py-8">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="flex-1"> 
+        <div className="py-15 lg:py-8">
+          <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8">
             {/* Header */}
-            <div className="mb-8">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center space-x-4">
-                            
+            <div className="mb-4 lg:mb-8">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
+                <div className="flex items-center space-x-3">
                   <button
                     onClick={() => navigate('/news')}
-                    className={`p-2 rounded-lg transition-colors ${darkMode ? 'hover:bg-gray-800 text-gray-300' : 'hover:bg-gray-200 text-gray-600'}`}
+                    className={`p-2 rounded-lg transition-colors flex-shrink-0 ${darkMode ? 'hover:bg-gray-800 text-gray-300' : 'hover:bg-gray-200 text-gray-600'}`}
                   >
                     <ArrowLeft className="w-5 h-5" />
                   </button>
                   
-                  <div>
-                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                  <div className="min-w-0 flex-1">
+                    <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white truncate">
                       {isEditing ? 'Editar Notícia' : 'Nova Notícia'}
                     </h1>
-                    <p className="text-gray-600 dark:text-gray-400 mt-1">
+                    <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1 truncate">
                       {isEditing ? 'Atualize os dados da notícia' : 'Crie uma nova notícia para compartilhar'}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center justify-start sm:justify-end space-x-2 flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={() => setShowPreview(!showPreview)}
-                    className={`flex items-center px-4 py-2 rounded-lg border transition-colors ${
+                    className={`flex items-center px-3 sm:px-4 py-2 rounded-lg border transition-colors flex-shrink-0 text-sm sm:text-base ${
                       darkMode 
                         ? 'border-gray-600 hover:bg-gray-800 text-gray-300' 
                         : 'border-gray-300 hover:bg-gray-100 text-gray-700'
                     }`}
                   >
-                    {showPreview ? <EyeOff className="w-4 h-4 mr-2" /> : <Eye className="w-4 h-4 mr-2" />}
-                    {showPreview ? 'Editar' : 'Visualizar'}
+                    {showPreview ? <EyeOff className="w-4 h-4 sm:mr-2" /> : <Eye className="w-4 h-4 sm:mr-2" />}
+                    <span className="hidden sm:inline">
+                      {showPreview ? 'Editar' : 'Visualizar'}
+                    </span>
                   </button>
 
                   <button
                     type="button"
                     onClick={handleCancel}
-                    className={`px-4 py-2 rounded-lg border transition-colors ${
+                    className={`px-3 sm:px-4 py-2 rounded-lg border transition-colors flex-shrink-0 text-sm sm:text-base ${
                       darkMode 
                         ? 'border-gray-600 hover:bg-gray-800 text-gray-300' 
                         : 'border-gray-300 hover:bg-gray-100 text-gray-700'
                     }`}
                   >
-                    Cancelar
+                    <span className="hidden sm:inline">Cancelar</span>
+                    <span className="sm:hidden">Cancelar</span>
                   </button>
 
                   <button
-                    onClick={handleSubmit(onSubmit)}
+                    onClick={handleButtonClick}
                     disabled={isSubmitting || loading}
-                    className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="flex items-center px-3 sm:px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0 text-sm sm:text-base"
                     style={{ backgroundColor: colors.primary }}
                   >
-                    <Save className="w-4 h-4 mr-2" />
-                    {isSubmitting ? 'Salvando...' : isEditing ? 'Atualizar' : 'Publicar'}
+                    <Save className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">
+                      {isSubmitting ? 'Salvando...' : isEditing ? 'Atualizar' : 'Publicar'}
+                    </span>
+                    <span className="sm:hidden">
+                      {isSubmitting ? '...' : isEditing ? 'Atualizar' : 'Publicar'}
+                    </span>
                   </button>
                 </div>
               </div>
             </div>
 
             {error && (
-              <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                <p className="text-red-600 dark:text-red-400">{error}</p>
+              <div className="mb-4 lg:mb-6 p-3 sm:p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <p className="text-red-600 dark:text-red-400 text-sm sm:text-base">{error}</p>
               </div>
             )}
 
             {/* Layout para formulário e preview lado a lado */}
             {!showPreview ? (
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
                 {/* Formulário - Ocupa 2/3 da largura */}
-                <div className="xl:col-span-2 space-y-6">
+                <div className="xl:col-span-2 space-y-4 sm:space-y-6">
                   {/* Título */}
                   <div>
                     <label htmlFor="title" className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-200">
@@ -317,7 +444,7 @@ export const NewsForm: React.FC = () => {
                       type="text"
                       {...register('title')}
                       placeholder="Digite o título da notícia..."
-                      className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent ${
+                      className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent text-sm sm:text-base ${
                         darkMode
                           ? 'bg-gray-800 border-gray-700 text-white focus:ring-blue-500'
                           : 'bg-white border-gray-300 text-gray-900 focus:ring-blue-500'
@@ -328,6 +455,30 @@ export const NewsForm: React.FC = () => {
                     )}
                   </div>
 
+                  {/* Preview */}
+                  <div>
+                    <label htmlFor="preview" className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-200">
+                      Preview/Resumo *
+                    </label>
+                    <textarea
+                      id="preview"
+                      {...register('preview')}
+                      placeholder="Digite um resumo curto da notícia (aparece na lista)..."
+                      rows={3}
+                      className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent text-sm sm:text-base ${
+                        darkMode
+                          ? 'bg-gray-800 border-gray-700 text-white focus:ring-blue-500'
+                          : 'bg-white border-gray-300 text-gray-900 focus:ring-blue-500'
+                      } ${errors.preview ? 'border-red-500' : ''}`}
+                    />
+                    {errors.preview && (
+                      <p className="mt-1 text-sm text-red-500">{errors.preview.message}</p>
+                    )}
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Este texto aparecerá como resumo na lista de notícias. Máximo 500 caracteres.
+                    </p>
+                  </div>
+
                   {/* Imagem */}
                   <div>
                     <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-200">
@@ -336,45 +487,29 @@ export const NewsForm: React.FC = () => {
                     
                     {/* Upload de arquivo */}
                     <div className="mb-3">
-                      <label className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                      <label className={`flex flex-col items-center justify-center w-full h-24 sm:h-32 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
                         darkMode
                           ? 'border-gray-600 hover:border-gray-500 bg-gray-800'
                           : 'border-gray-300 hover:border-gray-400 bg-gray-50'
                       }`}>
-                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                          <Upload className="w-8 h-8 mb-3 text-gray-400" />
-                          <p className="mb-2 text-sm text-gray-500 dark:text-gray-400">
+                        <div className="flex flex-col items-center justify-center pt-4 pb-5 sm:pt-5 sm:pb-6">
+                          <Upload className="w-6 h-6 sm:w-8 sm:h-8 mb-2 sm:mb-3 text-gray-400" />
+                          <p className="mb-1 sm:mb-2 text-xs sm:text-sm text-gray-500 dark:text-gray-400 text-center px-2">
                             <span className="font-semibold">Clique para upload</span> ou arraste e solte
                           </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            PNG, JPG, GIF (MAX. 5MB)
+                          <p className="text-xs text-gray-500 dark:text-gray-400 text-center px-2">
+                            PNG, JPG, WebP (MAX. 5MB)
                           </p>
                         </div>
                         <input 
                           type="file" 
                           className="hidden" 
-                          accept="image/*"
+                          accept="image/jpeg,image/png,image/webp"
                           onChange={handleImageUpload}
                         />
                       </label>
                     </div>
 
-                    {/* URL da imagem */}
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <ImageIcon className="text-gray-400 w-5 h-5" />
-                      </div>
-                      <input
-                        type="url"
-                        {...register('image')}
-                        placeholder="Ou cole a URL da imagem..."
-                        className={`w-full pl-10 pr-3 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent ${
-                          darkMode
-                            ? 'bg-gray-800 border-gray-700 text-white focus:ring-blue-500'
-                            : 'bg-white border-gray-300 text-gray-900 focus:ring-blue-500'
-                        } ${errors.image ? 'border-red-500' : ''}`}
-                      />
-                    </div>
                     {errors.image && (
                       <p className="mt-1 text-sm text-red-500">{errors.image.message}</p>
                     )}
@@ -383,21 +518,18 @@ export const NewsForm: React.FC = () => {
                     {imagePreview && (
                       <div className="mt-3">
                         <p className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-200">
-                          Preview:
+                          Preview da Imagem:
                         </p>
                         <div className="relative">
                           <img 
                             src={imagePreview} 
                             alt="Preview" 
-                            className="w-full h-48 object-cover rounded-lg border"
+                            className="w-full h-32 sm:h-48 object-cover rounded-lg border"
                           />
                           <button
                             type="button"
-                            onClick={() => {
-                              setImagePreview('');
-                              setValue('image', '');
-                            }}
-                            className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                            onClick={removeImage}
+                            className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 text-sm"
                           >
                             ×
                           </button>
@@ -406,26 +538,95 @@ export const NewsForm: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Campanha (apenas para super users) */}
+                  {/* Campanha (apenas para super users) - AGORA É UM SELECT */}
                   {user?.role === 'super' && (
                     <div>
                       <label htmlFor="campaign_id" className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-200">
                         Campanha
                       </label>
-                      <input
-                        id="campaign_id"
-                        type="text"
-                        {...register('campaign_id')}
-                        placeholder="ID da campanha (opcional)"
-                        className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent ${
-                          darkMode
-                            ? 'bg-gray-800 border-gray-700 text-white focus:ring-blue-500'
-                            : 'bg-white border-gray-300 text-gray-900 focus:ring-blue-500'
-                        }`}
-                      />
+                      
+                      {isLoadingCampaigns ? (
+                        <div className="flex items-center space-x-2 text-gray-500 dark:text-gray-400">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                          <span className="text-sm">Carregando campanhas...</span>
+                        </div>
+                      ) : (
+                        <select
+                          id="campaign_id"
+                          {...register('campaign_id')}
+                          className={`w-full px-3 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent text-sm sm:text-base ${
+                            darkMode
+                              ? 'bg-gray-800 border-gray-700 text-white focus:ring-blue-500'
+                              : 'bg-white border-gray-300 text-gray-900 focus:ring-blue-500'
+                          }`}
+                        >
+                          <option value="">Notícia Global (sem campanha específica)</option>
+                          {campaigns.map((campaign) => (
+                            <option 
+                              key={campaign.id} 
+                              value={campaign.id}
+                              selected={user?.campaign_id === String(campaign.id)}
+                            >
+                              {campaign.name}
+                              {user?.campaign_id === String(campaign.id) && ' (Minha Campanha)'}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      
                       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        Deixe em branco para notícia global
+                        {user?.role === 'super' 
+                          ? 'Selecione uma campanha ou deixe em branco para notícia global' 
+                          : 'Notícia vinculada à sua campanha atual'}
                       </p>
+
+                      {/* Informações da campanha selecionada */}
+                      {selectedCampaign && (
+                        <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                          <div className="flex items-center space-x-2">
+                            {selectedCampaign.logo && (
+                              <img 
+                                src={selectedCampaign.logo} 
+                                alt={selectedCampaign.name}
+                                className="w-6 h-6 rounded-full object-cover"
+                              />
+                            )}
+                            <div>
+                              <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                                {selectedCampaign.name}
+                              </p>
+                              <p className="text-xs text-blue-700 dark:text-blue-300">
+                                {selectedCampaign.description}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Para usuários não-super, mostrar campanha fixa */}
+                  {user?.role !== 'super' && user?.campaign_id && (
+                    <div>
+                      <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-200">
+                        Campanha
+                      </label>
+                      <div className={`p-3 rounded-lg border ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-300'}`}>
+                        <div className="flex items-center space-x-2">
+                          <Building className="w-4 h-4 text-gray-500" />
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                            {selectedCampaign?.name || 'Carregando...'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          Notícia vinculada à sua campanha atual
+                        </p>
+                        <input 
+                          type="hidden" 
+                          {...register('campaign_id')} 
+                          value={user.campaign_id}
+                        />
+                      </div>
                     </div>
                   )}
 
@@ -436,13 +637,15 @@ export const NewsForm: React.FC = () => {
                     </label>
                     <div className="w-full border rounded-lg overflow-hidden">
                       <TinyMCEEditor
-                        value={watchedBody}
-                        onChange={handleBodyChange}
-                        height={500}
+                        value={editorContent}
+                        onChange={handleContentChange}
+                        height={400}
                       />
                     </div>
-                    {errors.body && (
-                      <p className="mt-1 text-sm text-red-500">{errors.body.message}</p>
+                    {(!editorContent || editorContent.replace(/<[^>]*>/g, '').trim().length === 0) && (
+                      <p className="mt-1 text-sm text-red-500">
+                        O conteúdo da notícia é obrigatório
+                      </p>
                     )}
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                       Use o editor para formatar seu texto. Mínimo 1 caractere.
@@ -451,36 +654,37 @@ export const NewsForm: React.FC = () => {
                 </div>
 
                 {/* Informações - Ocupa 1/3 da largura */}
-                <div className="space-y-6">
-                  <div className={`rounded-lg border p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-                    <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
+                <div className="space-y-4 sm:space-y-6">
+                  <div className={`rounded-lg border p-4 sm:p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+                    <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-gray-900 dark:text-white">
                       📝 Dicas para uma boa notícia
                     </h3>
-                    <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-300">
+                    <ul className="space-y-1 sm:space-y-2 text-xs sm:text-sm text-gray-600 dark:text-gray-300">
                       <li>• Escreva um título claro e atraente</li>
                       <li>• Use imagens de alta qualidade</li>
+                      <li>• Preview deve ser um resumo curto e impactante</li>
                       <li>• Estruture o conteúdo com parágrafos curtos</li>
                       <li>• Use negrito e itálico para ênfase</li>
                       <li>• Inclua chamadas para ação quando apropriado</li>
                       <li>• Revise o texto antes de publicar</li>
                     </ul>
 
-                    <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-                      <h4 className="font-medium mb-2 text-gray-900 dark:text-white">
+                    <div className="mt-4 sm:mt-6 pt-3 sm:pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <h4 className="font-medium mb-2 text-gray-900 dark:text-white text-sm sm:text-base">
                         Informações do Autor
                       </h4>
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                          <span className="text-white text-sm font-semibold">
+                      <div className="flex items-center space-x-2 sm:space-x-3">
+                        <div className="w-6 h-6 sm:w-8 sm:h-8 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                          <span className="text-white text-xs sm:text-sm font-semibold">
                             {user?.name?.charAt(0).toUpperCase()}
                           </span>
                         </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900 dark:text-white">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
                             {user?.name}
                           </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            {user?.role} • {user?.campaign_id || 'Campanha não definida'}
+                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                            {user?.role} • {selectedCampaign?.name || user?.campaign_id || 'Campanha não definida'}
                           </p>
                         </div>
                       </div>
@@ -488,25 +692,35 @@ export const NewsForm: React.FC = () => {
                   </div>
 
                   {/* Estatísticas Rápidas */}
-                  <div className={`rounded-lg border p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-                    <h4 className="font-medium mb-4 text-gray-900 dark:text-white">
+                  <div className={`rounded-lg border p-4 sm:p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+                    <h4 className="font-medium mb-3 sm:mb-4 text-gray-900 dark:text-white text-sm sm:text-base">
                       📊 Estatísticas
                     </h4>
-                    <div className="space-y-3 text-sm">
+                    <div className="space-y-2 sm:space-y-3 text-xs sm:text-sm">
                       <div className="flex justify-between">
                         <span className="text-gray-600 dark:text-gray-400">Título:</span>
-                        <span className="font-medium text-gray600 dark:text-gray-400">{watchedTitle?.length || 0}/200</span>
+                        <span className="font-medium text-gray-600 dark:text-gray-400">{watchedTitle?.length || 0}/200</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">Preview:</span>
+                        <span className="font-medium text-gray-600 dark:text-gray-400">{watchedPreview?.length || 0}/500</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-600 dark:text-gray-400">Conteúdo:</span>
-                        <span className="font-medium text-gray600 dark:text-gray-400">
-                          {watchedBody?.replace(/<[^>]*>/g, '').length || 0} caracteres
+                        <span className="font-medium text-gray-600 dark:text-gray-400">
+                          {editorContent?.replace(/<[^>]*>/g, '').length || 0} chars
                         </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-600 dark:text-gray-400">Imagem:</span>
-                        <span className="font-medium text-gray600 dark:text-gray-400">
-                          {watchedImage ? '✓ Adicionada' : '✗ Não adicionada'}
+                        <span className="font-medium text-gray-600 dark:text-gray-400">
+                          {imageFile || imagePreview ? '✓ Adicionada' : '✗ Não adicionada'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600 dark:text-gray-400">Campanha:</span>
+                        <span className="font-medium text-gray-600 dark:text-gray-400">
+                          {selectedCampaign ? selectedCampaign.name : 'Global'}
                         </span>
                       </div>
                     </div>

@@ -15,20 +15,20 @@ export const useNews = () => {
     setError(null);
     try {
       const newsData = await newsService.getAllNews();
-      
+
       // Filtrar notícias por campanha se o usuário não for super
       let filteredNews = newsData;
-      
+
       if (user && user.role !== 'super' && user.campaign_id) {
-        filteredNews = newsData.filter(item => 
-          item.campaign_id === user.campaign_id || !item.campaign_id
+        filteredNews = newsData.filter(item =>
+          item.campaign_id?.toString() === user.campaign_id?.toString() || !item.campaign_id
         );
         console.log(`📰 Filtradas ${filteredNews.length} notícias da campanha ${user.campaign_id}`);
       }
-      
+
       setNews(filteredNews);
-    } catch (err) {
-      setError('Erro ao carregar notícias');
+    } catch (err: any) {
+      setError(err.message || 'Erro ao carregar notícias');
       console.error('Error loading news:', err);
     } finally {
       setLoading(false);
@@ -49,16 +49,18 @@ export const useNews = () => {
     setError(null);
     try {
       await newsService.createNews({
-        ...newsData,
+        title: newsData.title,
+        preview: newsData.preview,
+        content: newsData.content,
+        image: newsData.image,
         created_by: user.id,
-        image: newsData.image || 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
-        campaign_id: user.campaign_id || undefined // Usar campanha do usuário atual
+        campaign_id: user.campaign_id || undefined
       });
-      
+
       await loadNews();
       return true;
-    } catch (err) {
-      setError('Erro ao criar notícia');
+    } catch (err: any) {
+      setError(err.message || 'Erro ao criar notícia');
       console.error('Error creating news:', err);
       return false;
     } finally {
@@ -88,21 +90,18 @@ export const useNews = () => {
         return false;
       }
 
-      const updated = await newsService.updateNews(id, {
-        ...newsData,
-        // Manter a campanha original para super, outros usuários mantêm sua campanha
+      await newsService.updateNews(id, {
+        title: newsData.title,
+        preview: newsData.preview,
+        content: newsData.content,
+        image: newsData.image,
         campaign_id: user.role === 'super' ? newsData.campaign_id : user.campaign_id
       });
 
-      if (!updated) {
-        setError('Notícia não encontrada');
-        return false;
-      }
-      
       await loadNews();
       return true;
-    } catch (err) {
-      setError('Erro ao atualizar notícia');
+    } catch (err: any) {
+      setError(err.message || 'Erro ao atualizar notícia');
       console.error('Error updating news:', err);
       return false;
     } finally {
@@ -132,16 +131,11 @@ export const useNews = () => {
         return false;
       }
 
-      const success = await newsService.deleteNews(id);
-      if (!success) {
-        setError('Notícia não encontrada');
-        return false;
-      }
-      
-      await loadNews();
+      await newsService.deleteNews(id);
+      await loadNews(); // Recarregar a lista após exclusão
       return true;
-    } catch (err) {
-      setError('Erro ao excluir notícia');
+    } catch (err: any) {
+      setError(err.message || 'Erro ao excluir notícia');
       console.error('Error deleting news:', err);
       return false;
     } finally {
@@ -157,17 +151,17 @@ export const useNews = () => {
 
     try {
       const updatedNews = await newsService.likeNews(newsId, user.id);
-      
+
       if (updatedNews) {
-        setNews(prevNews => 
-          prevNews.map(news => 
+        setNews(prevNews =>
+          prevNews.map(news =>
             news.id === newsId ? updatedNews : news
           )
         );
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error liking news:', err);
-      setError('Erro ao curtir notícia');
+      setError(err.message || 'Erro ao curtir notícia');
     }
   };
 
@@ -185,17 +179,17 @@ export const useNews = () => {
       });
 
       if (updatedNews) {
-        setNews(prevNews => 
-          prevNews.map(news => 
+        setNews(prevNews =>
+          prevNews.map(news =>
             news.id === newsId ? updatedNews : news
           )
         );
         return true;
       }
       return false;
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error adding comment:', err);
-      setError('Erro ao adicionar comentário');
+      setError(err.message || 'Erro ao adicionar comentário');
       return false;
     }
   };
@@ -208,9 +202,9 @@ export const useNews = () => {
 
     try {
       return await newsService.getNewsByCampaign(campaignId);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error getting news by campaign:', err);
-      throw err;
+      throw new Error(err.message || 'Erro ao buscar notícias por campanha');
     }
   };
 
@@ -218,19 +212,24 @@ export const useNews = () => {
   const getNewsById = async (id: string): Promise<News | null> => {
     try {
       const newsItem = await newsService.getNewsById(id);
-      
+
       // Verificar se o usuário tem acesso a esta notícia
       if (user && user.role !== 'super' && user.campaign_id && newsItem?.campaign_id) {
-        if (newsItem.campaign_id !== user.campaign_id) {
+        if (newsItem.campaign_id.toString() !== user.campaign_id.toString()) {
           throw new Error('Você não tem acesso a esta notícia');
         }
       }
-      
+
       return newsItem;
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error getting news by id:', err);
-      throw err;
+      throw new Error(err.message || 'Erro ao buscar notícia');
     }
+  };
+
+  // Função para atualizar a lista de notícias
+  const refreshNews = async (): Promise<void> => {
+    await loadNews();
   };
 
   // Limpar erros
@@ -243,22 +242,23 @@ export const useNews = () => {
     news,
     loading,
     error,
-    
+
     // Ações CRUD
     createNews,
     updateNews,
     deleteNews,
     likeNews,
     addComment,
-    
+    refreshNews, // ✅ Agora está incluído
+
     // Buscas
     getNewsById,
     getNewsByCampaign,
-    
+
     // Utilitários
     refetch: loadNews,
     clearError,
-    
+
     // Permissões baseadas no usuário
     canCreate: !!user,
     canEdit: (newsItem: News) => {
@@ -270,7 +270,7 @@ export const useNews = () => {
       return user.role === 'super' || newsItem.created_by === user.id;
     },
     canManageAll: user?.role === 'super',
-    
+
     // Informações do usuário
     currentUser: user
   };

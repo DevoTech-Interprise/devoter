@@ -594,7 +594,7 @@ const NetworkPage = () => {
     <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
       <Sidebar />
       <div className="flex-1 overflow-auto">
-        <div className="p-8">
+        <div className="p-8 py-15">
           <ToastContainer position="top-right" />
           
           <div className="max-w-6xl mx-auto">

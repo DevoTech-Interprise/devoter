@@ -7,7 +7,6 @@ import { toast } from 'react-toastify';
 import {
     ArrowLeft,
     Calendar,
-    User,
     Heart,
     MessageCircle,
     Edit3,
@@ -15,12 +14,13 @@ import {
     Share2,
     Eye,
     Clock,
-    Tag
+    Building
 } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { useNews } from '../../pages/hooks/useNews';
 import { useUser } from '../../context/UserContext';
 import { commentSchema, type CommentFormData } from '../../schemas/news';
+import { campaignService, type Campaign } from '../../services/campaignService';
 import Sidebar from '../../components/Sidebar';
 
 export const NewsDetail: React.FC = () => {
@@ -30,9 +30,9 @@ export const NewsDetail: React.FC = () => {
     const { user } = useUser();
     const {
         getNewsById,
-        likeNews,
-        addComment,
         deleteNews,
+        canEdit,
+        canDelete,
         loading,
         error,
         clearError
@@ -43,6 +43,7 @@ export const NewsDetail: React.FC = () => {
     const [isLiking, setIsLiking] = useState(false);
     const [isAddingComment, setIsAddingComment] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [campaign, setCampaign] = useState<Campaign | null>(null);
 
     const {
         register,
@@ -66,7 +67,42 @@ export const NewsDetail: React.FC = () => {
 
             try {
                 const newsData = await getNewsById(id);
-                setNews(newsData);
+                
+                // Verificar se newsData não é null
+                if (!newsData) {
+                    toast.error('Notícia não encontrada');
+                    navigate('/news');
+                    return;
+                }
+
+                // Adicionar dados mockados para likes e comentários
+                const newsWithMockData = {
+                    ...newsData,
+                    likes: newsData.likes || Math.floor(Math.random() * 50),
+                    liked_by: newsData.liked_by || [],
+                    comments: newsData.comments || [
+                        {
+                            id: '1',
+                            user_id: '2',
+                            user_name: 'Maria Silva',
+                            text: 'Excelente notícia! Muito informativa.',
+                            created_at: new Date(Date.now() - 3600000).toISOString()
+                        },
+                        {
+                            id: '2',
+                            user_id: '3',
+                            user_name: 'João Santos',
+                            text: 'Parabéns pela iniciativa!',
+                            created_at: new Date(Date.now() - 7200000).toISOString()
+                        }
+                    ]
+                };
+                setNews(newsWithMockData);
+
+                // Carregar informações da campanha se existir
+                if (newsData.campaign_id) {
+                    loadCampaignInfo(String(newsData.campaign_id)); // Convertendo para string
+                }
             } catch (err: any) {
                 console.error('Erro ao carregar notícia:', err);
                 toast.error(err.message || 'Erro ao carregar notícia');
@@ -76,8 +112,17 @@ export const NewsDetail: React.FC = () => {
             }
         };
 
+        const loadCampaignInfo = async (campaignId: string) => {
+            try {
+                const campaignData = await campaignService.getById(campaignId);
+                setCampaign(campaignData);
+            } catch (error) {
+                console.error('Erro ao carregar campanha:', error);
+            }
+        };
+
         loadNews();
-    }, [id, getNewsById, navigate, clearError]);
+    }, [id, navigate]);
 
     // Limpar erro quando o componente desmontar
     useEffect(() => {
@@ -86,6 +131,7 @@ export const NewsDetail: React.FC = () => {
         };
     }, [clearError]);
 
+    // Mock da função de like
     const handleLike = async () => {
         if (!user) {
             toast.error('Faça login para curtir notícias');
@@ -96,15 +142,39 @@ export const NewsDetail: React.FC = () => {
 
         setIsLiking(true);
         try {
-            await likeNews(news.id);
-            // A atualização do estado é feita pelo hook useNews
+            // Simular delay de API
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            const isCurrentlyLiked = news.liked_by?.includes(user.id);
+            let newLikes = news.likes || 0;
+            let newLikedBy = [...(news.liked_by || [])];
+
+            if (isCurrentlyLiked) {
+                // Remover like
+                newLikes = Math.max(0, newLikes - 1);
+                newLikedBy = newLikedBy.filter((id: string) => id !== user.id);
+                toast.info('Like removido');
+            } else {
+                // Adicionar like
+                newLikes += 1;
+                newLikedBy.push(user.id);
+                toast.success('Notícia curtida!');
+            }
+
+            setNews({
+                ...news,
+                likes: newLikes,
+                liked_by: newLikedBy
+            });
         } catch (err) {
             console.error('Erro ao curtir notícia:', err);
+            toast.error('Erro ao curtir notícia');
         } finally {
             setIsLiking(false);
         }
     };
 
+    // Mock da função de adicionar comentário
     const handleAddComment = async (data: CommentFormData) => {
         if (!user) {
             toast.error('Faça login para comentar');
@@ -115,16 +185,29 @@ export const NewsDetail: React.FC = () => {
 
         setIsAddingComment(true);
         try {
-            const success = await addComment(news.id, data);
-            if (success) {
-                reset();
-                toast.success('Comentário adicionado!');
-            } else {
-                throw new Error('Falha ao adicionar comentário');
-            }
+            // Simular delay de API
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            const newComment = {
+                id: Math.random().toString(36).substr(2, 9),
+                user_id: user.id,
+                user_name: user.name,
+                text: data.text,
+                created_at: new Date().toISOString()
+            };
+
+            const updatedComments = [newComment, ...(news.comments || [])];
+
+            setNews({
+                ...news,
+                comments: updatedComments
+            });
+
+            reset();
+            toast.success('Comentário adicionado!');
         } catch (err: any) {
             console.error('Erro ao adicionar comentário:', err);
-            toast.error(err.message || 'Erro ao adicionar comentário');
+            toast.error('Erro ao adicionar comentário');
         } finally {
             setIsAddingComment(false);
         }
@@ -154,7 +237,7 @@ export const NewsDetail: React.FC = () => {
 
         const shareData = {
             title: news.title,
-            text: news.title,
+            text: news.preview || news.title,
             url: window.location.href,
         };
 
@@ -195,15 +278,15 @@ export const NewsDetail: React.FC = () => {
         return formatDate(dateString);
     };
 
-    const canEdit = user && (user.role === 'super' || news?.created_by === user.id);
-    const canDelete = user && (user.role === 'super' || news?.created_by === user.id);
-    const isLiked = user && news?.liked_by.includes(user.id);
+    const userCanEdit = news && canEdit(news);
+    const userCanDelete = news && canDelete(news);
+    const isLiked = user && news?.liked_by?.includes(user.id);
 
     if (isLoading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 ">
+            <div className="min-h-screen flex bg-gray-50 dark:bg-gray-900">
                 <Sidebar />
-                <div className="flex-1 items-center justify-center">
+                <div className="flex-1 flex items-center justify-center p-4">
                     <div className="text-center">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
                         <p className={`text-lg ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Carregando notícia...</p>
@@ -217,7 +300,7 @@ export const NewsDetail: React.FC = () => {
         return (
             <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
                 <Sidebar />
-                <div className="flex-1 flex items-center justify-center">
+                <div className="flex-1 flex items-center justify-center p-4">
                     <div className="text-center">
                         <p className="text-red-500 text-lg mb-4">Notícia não encontrada</p>
                         <Link
@@ -238,67 +321,66 @@ export const NewsDetail: React.FC = () => {
             <Sidebar />
             
             {/* Main Content */}
-            <div className="flex-1 ">
-                <div className="py-8">
-                    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex-1">
+                <div className="py-15 lg:py-8">
+                    <div className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-8">
                         {/* Header */}
-                        <div className="mb-8">
-                            <div className="flex justify-between items-center">
-                                <div className="flex items-center space-x-4">
-                                    
+                        <div className="mb-4 lg:mb-8">
+                            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                                <div className="flex items-center space-x-3">
                                     <button
                                         onClick={() => navigate('/news')}
-                                        className={`p-2 rounded-lg transition-colors ${darkMode ? 'hover:bg-gray-800 text-gray-300' : 'hover:bg-gray-200 text-gray-600'
+                                        className={`p-2 rounded-lg transition-colors flex-shrink-0 ${darkMode ? 'hover:bg-gray-800 text-gray-300' : 'hover:bg-gray-200 text-gray-600'
                                             }`}
                                     >
                                         <ArrowLeft className="w-5 h-5" />
                                     </button>
 
-                                    <div>
-                                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                                    <div className="min-w-0 flex-1">
+                                        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white truncate">
                                             Detalhes da Notícia
                                         </h1>
-                                        <p className="text-gray-600 dark:text-gray-400 mt-1">
+                                        <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1 truncate">
                                             Visualizando notícia publicada
                                         </p>
                                     </div>
                                 </div>
 
-                                <div className="flex items-center space-x-2">
+                                <div className="flex items-center justify-start sm:justify-end space-x-2 overflow-x-auto pb-2 sm:pb-0">
                                     {/* Botão Compartilhar */}
                                     <button
                                         onClick={handleShare}
-                                        className={`flex items-center px-3 py-2 rounded-lg transition-colors ${darkMode
+                                        className={`flex items-center px-2 sm:px-3 py-2 rounded-lg transition-colors flex-shrink-0 ${darkMode
                                                 ? 'hover:bg-gray-800 text-gray-300'
                                                 : 'hover:bg-gray-200 text-gray-600'
                                             }`}
                                     >
-                                        <Share2 className="w-4 h-4 mr-2" />
-                                        Compartilhar
+                                        <Share2 className="w-4 h-4 sm:mr-2" />
+                                        <span className="hidden sm:inline">Compartilhar</span>
                                     </button>
 
                                     {/* Botão Editar */}
-                                    {canEdit && (
+                                    {userCanEdit && (
                                         <Link
                                             to={`/news/edit/${news.id}`}
-                                            className={`flex items-center px-3 py-2 rounded-lg transition-colors ${darkMode
+                                            className={`flex items-center px-2 sm:px-3 py-2 rounded-lg transition-colors flex-shrink-0 ${darkMode
                                                     ? 'hover:bg-gray-800 text-gray-300'
                                                     : 'hover:bg-gray-200 text-gray-600'
                                                 }`}
                                         >
-                                            <Edit3 className="w-4 h-4 mr-2" />
-                                            Editar
+                                            <Edit3 className="w-4 h-4 sm:mr-2" />
+                                            <span className="hidden sm:inline">Editar</span>
                                         </Link>
                                     )}
 
                                     {/* Botão Excluir */}
-                                    {canDelete && (
+                                    {userCanDelete && (
                                         <button
                                             onClick={() => setShowDeleteConfirm(true)}
-                                            className="flex items-center px-3 py-2 text-red-500 rounded-lg transition-colors hover:bg-red-50 dark:hover:bg-red-900/20"
+                                            className="flex items-center px-2 sm:px-3 py-2 text-red-500 rounded-lg transition-colors hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0"
                                         >
-                                            <Trash2 className="w-4 h-4 mr-2" />
-                                            Excluir
+                                            <Trash2 className="w-4 h-4 sm:mr-2" />
+                                            <span className="hidden sm:inline">Excluir</span>
                                         </button>
                                     )}
                                 </div>
@@ -306,70 +388,93 @@ export const NewsDetail: React.FC = () => {
                         </div>
 
                         {error && (
-                            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                                <p className="text-red-600 dark:text-red-400">{error}</p>
+                            <div className="mb-4 lg:mb-6 p-3 sm:p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                                <p className="text-red-600 dark:text-red-400 text-sm sm:text-base">{error}</p>
                             </div>
                         )}
 
                         {/* Conteúdo da Notícia */}
-                        <div className={`rounded-2xl overflow-hidden shadow-lg ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                        <div className={`rounded-xl sm:rounded-2xl overflow-hidden shadow-lg ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
                             {/* Imagem de Capa */}
                             {news.image && (
                                 <div className="relative">
                                     <img
                                         src={news.image}
                                         alt={news.title}
-                                        className="w-full h-96 object-cover"
+                                        className="w-full h-48 sm:h-64 lg:h-96 object-cover"
                                     />
+                                    
+                                    {/* Overlay da Campanha */}
+                                    {campaign && (
+                                        <div className="absolute top-3 left-3">
+                                            <div className="flex items-center space-x-2 bg-black bg-opacity-70 rounded-full px-3 py-2 backdrop-blur-sm border border-white border-opacity-20">
+                                                {campaign.logo && (
+                                                    <img 
+                                                        src={campaign.logo} 
+                                                        alt={campaign.name}
+                                                        className="w-5 h-5 rounded-full object-cover"
+                                                    />
+                                                )}
+                                                <span className="text-white text-sm font-medium">
+                                                    {campaign.name}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
                             {/* Conteúdo */}
-                            <div className="p-8">
+                            <div className="p-4 sm:p-6 lg:p-8">
                                 {/* Título */}
-                                <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4 leading-tight">
+                                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-3 sm:mb-4 leading-tight">
                                     {news.title}
                                 </h1>
 
-                                {/* Meta Informações */}
-                                <div className="flex flex-wrap items-center gap-4 mb-6 text-sm text-gray-500 dark:text-gray-400">
-                                    <div className="flex items-center">
-                                        <User className="w-4 h-4 mr-1" />
-                                        <span>Por {news.created_by}</span>
-                                    </div>
+                                {/* Preview */}
+                                {news.preview && (
+                                    <p className="text-lg sm:text-xl text-gray-600 dark:text-gray-300 mb-4 sm:mb-6 leading-relaxed">
+                                        {news.preview}
+                                    </p>
+                                )}
 
+                                {/* Meta Informações */}
+                                <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-4 sm:mb-6 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                                     <div className="flex items-center">
-                                        <Calendar className="w-4 h-4 mr-1" />
+                                        <Calendar className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
                                         <span>{formatDate(news.created_at)}</span>
                                     </div>
 
                                     <div className="flex items-center">
-                                        <Clock className="w-4 h-4 mr-1" />
+                                        <Clock className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
                                         <span>{getTimeAgo(news.created_at)}</span>
                                     </div>
 
-                                    {news.campaign_id && (
+                                    {/* Campanha - versão badge */}
+                                    {campaign && (
                                         <div className="flex items-center">
-                                            <Tag className="w-4 h-4 mr-1" />
-                                            <span>Campanha: {news.campaign_id}</span>
+                                            <div className="flex items-center space-x-1 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-1 rounded-full">
+                                                <Building className="w-3 h-3 sm:w-4 sm:h-4" />
+                                                <span className="text-xs sm:text-sm">{campaign.name}</span>
+                                            </div>
                                         </div>
                                     )}
 
                                     <div className="flex items-center">
-                                        <Eye className="w-4 h-4 mr-1" />
+                                        <Eye className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
                                         <span>Visualizações: {Math.floor(Math.random() * 1000) + 100}</span>
                                     </div>
                                 </div>
 
                                 {/* Corpo da Notícia */}
                                 <div
-                                    className="prose prose-lg max-w-none dark:prose-invert mb-8 text-gray-700 dark:text-gray-300"
-                                    dangerouslySetInnerHTML={{ __html: news.body }}
+                                    className="prose prose-sm sm:prose-base lg:prose-lg max-w-none dark:prose-invert mb-6 sm:mb-8 text-gray-700 dark:text-gray-300"
+                                    dangerouslySetInnerHTML={{ __html: news.content }}
                                 />
 
                                 {/* Ações */}
-                                <div className="flex items-center justify-between pt-6 border-t border-gray-200 dark:border-gray-700">
-                                    <div className="flex items-center space-x-6">
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pt-4 sm:pt-6 border-t border-gray-200 dark:border-gray-700 gap-4">
+                                    <div className="flex items-center justify-between sm:justify-start space-x-4 sm:space-x-6">
                                         {/* Like */}
                                         <button
                                             onClick={handleLike}
@@ -379,20 +484,20 @@ export const NewsDetail: React.FC = () => {
                                                     : 'text-gray-500 dark:text-gray-400 hover:text-red-500'
                                                 } disabled:opacity-50 disabled:cursor-not-allowed`}
                                         >
-                                            <Heart className={`w-5 h-5 ${isLiked ? 'fill-current' : ''}`} />
-                                            <span className="font-medium">{news.likes}</span>
-                                            <span className="text-sm">Curtidas</span>
+                                            <Heart className={`w-4 h-4 sm:w-5 sm:h-5 ${isLiked ? 'fill-current' : ''}`} />
+                                            <span className="font-medium text-sm sm:text-base">{news.likes || 0}</span>
+                                            <span className="text-xs sm:text-sm hidden xs:inline">Curtidas</span>
                                         </button>
 
                                         {/* Comentários */}
                                         <div className="flex items-center space-x-2 text-gray-500 dark:text-gray-400">
-                                            <MessageCircle className="w-5 h-5" />
-                                            <span className="font-medium">{news.comments.length}</span>
-                                            <span className="text-sm">Comentários</span>
+                                            <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+                                            <span className="font-medium text-sm sm:text-base">{news.comments?.length || 0}</span>
+                                            <span className="text-xs sm:text-sm hidden xs:inline">Comentários</span>
                                         </div>
                                     </div>
 
-                                    <div className="text-sm text-gray-500 dark:text-gray-400">
+                                    <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 text-center sm:text-right">
                                         Atualizado em {formatDate(news.updated_at)}
                                     </div>
                                 </div>
@@ -400,47 +505,47 @@ export const NewsDetail: React.FC = () => {
                         </div>
 
                         {/* Seção de Comentários */}
-                        <div className={`mt-8 rounded-2xl shadow-lg ${darkMode ? 'bg-gray-800' : 'bg-white'} p-8`}>
-                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-                                Comentários ({news.comments.length})
+                        <div className={`mt-4 sm:mt-8 rounded-xl sm:rounded-2xl shadow-lg ${darkMode ? 'bg-gray-800' : 'bg-white'} p-4 sm:p-6 lg:p-8`}>
+                            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-4 sm:mb-6">
+                                Comentários ({news.comments?.length || 0})
                             </h2>
 
                             {/* Formulário de Comentário */}
                             {user ? (
-                                <form onSubmit={handleSubmit(handleAddComment)} className="mb-8">
-                                    <div className="flex space-x-4">
+                                <form onSubmit={handleSubmit(handleAddComment)} className="mb-6 sm:mb-8">
+                                    <div className="flex space-x-3 sm:space-x-4">
                                         <div className="flex-shrink-0">
                                             <div
-                                                className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold"
+                                                className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm sm:text-base"
                                                 style={{ backgroundColor: colors.primary }}
                                             >
                                                 {user.name?.charAt(0).toUpperCase()}
                                             </div>
                                         </div>
 
-                                        <div className="flex-1">
+                                        <div className="flex-1 min-w-0">
                                             <textarea
                                                 {...register('text')}
                                                 placeholder="Escreva seu comentário..."
                                                 rows={3}
-                                                className={`w-full px-4 py-3 rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent resize-none ${darkMode
+                                                className={`w-full px-3 sm:px-4 py-2 sm:py-3 rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent resize-none text-sm sm:text-base ${darkMode
                                                         ? 'bg-gray-700 border-gray-600 text-white focus:ring-blue-500'
                                                         : 'bg-white border-gray-300 text-gray-900 focus:ring-blue-500'
                                                     } ${errors.text ? 'border-red-500' : ''}`}
                                             />
                                             {errors.text && (
-                                                <p className="mt-1 text-sm text-red-500">{errors.text.message}</p>
+                                                <p className="mt-1 text-xs sm:text-sm text-red-500">{errors.text.message}</p>
                                             )}
 
-                                            <div className="flex justify-between items-center mt-3">
-                                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mt-2 sm:mt-3 gap-2">
+                                                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 order-2 sm:order-1">
                                                     {commentText?.length || 0}/500 caracteres
                                                 </p>
 
                                                 <button
                                                     type="submit"
                                                     disabled={isAddingComment || !commentText?.trim()}
-                                                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                    className="px-3 sm:px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm sm:text-base order-1 sm:order-2 w-full sm:w-auto"
                                                     style={{ backgroundColor: colors.primary }}
                                                 >
                                                     {isAddingComment ? 'Enviando...' : 'Comentar'}
@@ -450,13 +555,13 @@ export const NewsDetail: React.FC = () => {
                                     </div>
                                 </form>
                             ) : (
-                                <div className="text-center py-6 border border-gray-200 dark:border-gray-700 rounded-lg mb-8">
-                                    <p className="text-gray-600 dark:text-gray-400 mb-3">
+                                <div className="text-center py-4 sm:py-6 border border-gray-200 dark:border-gray-700 rounded-lg mb-6 sm:mb-8">
+                                    <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mb-3">
                                         Faça login para comentar nesta notícia
                                     </p>
                                     <Link
                                         to="/login"
-                                        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                                        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm sm:text-base inline-block"
                                         style={{ backgroundColor: colors.primary }}
                                     >
                                         Fazer Login
@@ -465,38 +570,38 @@ export const NewsDetail: React.FC = () => {
                             )}
 
                             {/* Lista de Comentários */}
-                            <div className="space-y-6">
-                                {news.comments.length === 0 ? (
-                                    <div className="text-center py-8">
-                                        <MessageCircle className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                                        <p className="text-gray-500 dark:text-gray-400">
+                            <div className="space-y-4 sm:space-y-6">
+                                {!news.comments || news.comments.length === 0 ? (
+                                    <div className="text-center py-6 sm:py-8">
+                                        <MessageCircle className="w-8 h-8 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-2 sm:mb-3" />
+                                        <p className="text-sm sm:text-base text-gray-500 dark:text-gray-400">
                                             Nenhum comentário ainda. Seja o primeiro a comentar!
                                         </p>
                                     </div>
                                 ) : (
                                     news.comments.map((comment: any) => (
-                                        <div key={comment.id} className="flex space-x-4">
+                                        <div key={comment.id} className="flex space-x-3 sm:space-x-4">
                                             <div className="flex-shrink-0">
                                                 <div
-                                                    className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold"
+                                                    className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm sm:text-base"
                                                     style={{ backgroundColor: colors.secondary }}
                                                 >
                                                     {comment.user_name?.charAt(0).toUpperCase()}
                                                 </div>
                                             </div>
 
-                                            <div className="flex-1">
-                                                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <h4 className="font-semibold text-gray-900 dark:text-white">
+                                            <div className="flex-1 min-w-0">
+                                                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 sm:p-4">
+                                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2 gap-1">
+                                                        <h4 className="font-semibold text-gray-900 dark:text-white text-sm sm:text-base truncate">
                                                             {comment.user_name}
                                                         </h4>
-                                                        <span className="text-sm text-gray-500 dark:text-gray-400">
+                                                        <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                                                             {getTimeAgo(comment.created_at)}
                                                         </span>
                                                     </div>
 
-                                                    <p className="text-gray-700 dark:text-gray-300">
+                                                    <p className="text-gray-700 dark:text-gray-300 text-sm sm:text-base break-words">
                                                         {comment.text}
                                                     </p>
                                                 </div>
@@ -513,19 +618,19 @@ export const NewsDetail: React.FC = () => {
             {/* Modal de Confirmação de Exclusão */}
             {showDeleteConfirm && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className={`rounded-2xl p-6 max-w-md w-full ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                    <div className={`rounded-xl sm:rounded-2xl p-4 sm:p-6 max-w-md w-full mx-4 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
                         <h3 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">
                             Confirmar Exclusão
                         </h3>
 
-                        <p className="text-gray-600 dark:text-gray-400 mb-6">
+                        <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mb-4 sm:mb-6">
                             Tem certeza que deseja excluir a notícia "{news.title}"? Esta ação não pode ser desfeita.
                         </p>
 
-                        <div className="flex space-x-3">
+                        <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
                             <button
                                 onClick={() => setShowDeleteConfirm(false)}
-                                className={`flex-1 px-4 py-2 rounded-lg border transition-colors ${darkMode
+                                className={`flex-1 px-4 py-2 rounded-lg border transition-colors text-sm sm:text-base ${darkMode
                                         ? 'border-gray-600 hover:bg-gray-700 text-gray-300'
                                         : 'border-gray-300 hover:bg-gray-100 text-gray-700'
                                     }`}
@@ -536,7 +641,7 @@ export const NewsDetail: React.FC = () => {
                             <button
                                 onClick={handleDelete}
                                 disabled={loading}
-                                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 transition-colors"
+                                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 transition-colors text-sm sm:text-base"
                             >
                                 {loading ? 'Excluindo...' : 'Excluir'}
                             </button>

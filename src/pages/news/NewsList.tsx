@@ -2,24 +2,47 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Search, Filter, Grid, List } from 'lucide-react';
-import { useNews } from '../../pages/hooks/useNews';
+import { useNews } from '../../pages/hooks/useNews'; // Caminho correto para o hook
 import { useUser } from '../../context/UserContext';
 import { NewsCard } from '../../components/newsCard';
 import Sidebar from '../../components/Sidebar';
 
 export const NewsList: React.FC = () => {
-  const { news, loading, error } = useNews();
+  const { news, loading, error, deleteNews } = useNews(); // Não precisamos mais do refreshNews
   const { user } = useUser();
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
   // Verificar se o usuário pode criar notícias
   const canCreateNews = user && (user.role === 'super' || user.role === 'admin' || user.role === 'manager');
 
+  // Função para lidar com a exclusão de notícia
+  const handleDeleteNews = async (newsId: string) => {
+    if (!window.confirm('Tem certeza que deseja excluir esta notícia?')) {
+      return;
+    }
+
+    setIsDeleting(newsId);
+    try {
+      const success = await deleteNews(newsId);
+      if (!success) {
+        throw new Error('Falha ao excluir notícia');
+      }
+      // A lista será atualizada automaticamente pelo hook useNews
+    } catch (err: any) {
+      console.error('Erro ao excluir notícia:', err);
+      alert(err.message || 'Erro ao excluir notícia');
+    } finally {
+      setIsDeleting(null);
+    }
+  };
+
   // Filtrar notícias baseado no termo de busca
   const filteredNews = news.filter(newsItem =>
     newsItem.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    newsItem.body.toLowerCase().includes(searchTerm.toLowerCase())
+    newsItem.preview.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    newsItem.content.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   if (loading) {
@@ -49,7 +72,7 @@ export const NewsList: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
       {/* Sidebar */}
-      <Sidebar  />
+      <Sidebar />
       
       {/* Main Content */}
       <div className="flex-1">
@@ -57,10 +80,10 @@ export const NewsList: React.FC = () => {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             {/* Header */}
             <div className="mb-8">
-              <div className="flex justify-between items-center">
+              <div className="flex flex-col md:flex-row justify-center md:justify-between gap-5 items-center">
                 <div className="flex items-center space-x-4">               
                   <div>
-                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                    <h1 className="text-3xl text-center md:text-start font-bold text-gray-900 dark:text-white">
                       Notícias
                     </h1>
                     <p className="text-gray-600 dark:text-gray-400 mt-2">
@@ -87,7 +110,7 @@ export const NewsList: React.FC = () => {
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                   <input
                     type="text"
-                    placeholder="Buscar notícias por título ou conteúdo..."
+                    placeholder="Buscar notícias por título, preview ou conteúdo..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -143,7 +166,12 @@ export const NewsList: React.FC = () => {
             {viewMode === 'grid' ? (
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {filteredNews.map((newsItem) => (
-                  <NewsCard key={newsItem.id} news={newsItem} />
+                  <NewsCard 
+                    key={newsItem.id} 
+                    news={newsItem} 
+                    onDelete={handleDeleteNews}
+                    isDeleting={isDeleting === newsItem.id}
+                  />
                 ))}
               </div>
             ) : (
@@ -162,17 +190,14 @@ export const NewsList: React.FC = () => {
                         <h3 className="font-semibold text-lg text-gray-900 dark:text-white mb-2">
                           {newsItem.title}
                         </h3>
-                        <div 
-                          className="text-gray-600 dark:text-gray-300 text-sm mb-3 line-clamp-2 prose prose-sm dark:prose-invert max-w-none"
-                          dangerouslySetInnerHTML={{ __html: newsItem.body }}
-                        />
+                        <p className="text-gray-600 dark:text-gray-300 text-sm mb-3 line-clamp-2">
+                          {newsItem.preview}
+                        </p>
                         <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
                           <div className="flex items-center space-x-4">
                             <span>{new Date(newsItem.created_at).toLocaleDateString('pt-BR')}</span>
                             <span>•</span>
-                            <span>{newsItem.likes} curtidas</span>
-                            <span>•</span>
-                            <span>{newsItem.comments.length} comentários</span>
+                            <span>Campanha: {newsItem.campaign_id || 'Geral'}</span>
                           </div>
                           <Link
                             to={`/news/${newsItem.id}`}
