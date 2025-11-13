@@ -188,6 +188,13 @@ export const userService = {
   },
 
 
+  // 🔹 Buscar usuário com invite_token
+  getWithInviteToken: async (userId: string): Promise<User> => {
+    const { data } = await api.get(`api/auth/${userId}`);
+    return data;
+  },
+
+
 
   // 🔹 Atualizar campaign_id de um manager
   assignToCampaign: async (userId: string, campaignId: string, invitedBy?: string): Promise<User> => {

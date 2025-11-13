@@ -4,6 +4,7 @@ import { useTheme } from "../../context/ThemeContext";
 import { useUser } from "../../context/UserContext";
 import { inviteService } from "../../services/inviteService";
 import { campaignService } from "../../services/campaignService";
+import { userService } from "../../services/userService";
 import { toast, ToastContainer } from "react-toastify";
 import Sidebar from "../../components/Sidebar";
 import QRCode from "react-qr-code";
@@ -38,12 +39,20 @@ const Invites = () => {
         return;
       }
 
-      // Gera o convite
+      // 🔧 CORREÇÃO: Busca o usuário com o invite_token atual
       try {
-        const resp = await inviteService.generateInvite(userId);
-        setCampaigns([{ ...myCampaign, inviteToken: resp.invite_token, inviter: user }]);
+        const userWithToken = await userService.getWithInviteToken(userId);
+        const currentInviteToken = userWithToken.invite_token;
+
+        console.log('🔍 Token atual do usuário:', currentInviteToken);
+
+        setCampaigns([{
+          ...myCampaign,
+          inviteToken: currentInviteToken, // ✅ Usa o token atual
+          inviter: user
+        }]);
       } catch (err) {
-        console.error("Erro ao gerar token:", err);
+        console.error("Erro ao buscar token do usuário:", err);
         setCampaigns([{ ...myCampaign, inviteToken: null, inviter: user }]);
       }
     } catch (error) {
@@ -74,7 +83,7 @@ const Invites = () => {
     };
   }, []);
 
-  // Regenera convite
+  // 🔧 CORREÇÃO: Só gera novo token quando clicado
   const handleGenerateInvite = async (campaignId: string) => {
     try {
       setLoading(true);
@@ -84,11 +93,27 @@ const Invites = () => {
         return;
       }
 
+      // 🔍 DEBUG: Verifique a resposta completa
+      console.log('🔍 Chamando generateInvite para userId:', userId);
       const response = await inviteService.generateInvite(userId);
+      console.log('📥 Resposta completa:', response);
+      console.log('🔑 invite_token recebido:', response.invite_token);
+
+      // 🔧 CORREÇÃO: Extrai apenas o token se vier com URL completa
+      let inviteToken = response.invite_token;
+
+      // Se o token contém a URL completa, extrai apenas a parte do token
+      if (inviteToken.includes('/invite/')) {
+        inviteToken = inviteToken.split('/invite/').pop() || inviteToken;
+        console.log('🔄 Token extraído:', inviteToken);
+      }
+
+      // Atualiza a lista com o NOVO token
       setCampaigns(prev => prev.map(c =>
-        c.id === campaignId ? { ...c, inviteToken: response.invite_token, inviter: user } : c
+        c.id === campaignId ? { ...c, inviteToken: inviteToken, inviter: user } : c
       ));
-      toast.success("Link gerado com sucesso!");
+
+      toast.success("Novo link gerado com sucesso!");
     } catch (error) {
       toast.error("Erro ao gerar link de convite");
       console.error(error);
@@ -97,10 +122,22 @@ const Invites = () => {
     }
   };
 
+  // 🔧 CORREÇÃO: Função para obter a URL completa corretamente
+  const getFullInviteUrl = (inviteToken: string) => {
+    // Remove qualquer URL que possa estar no token
+    const cleanToken = inviteToken.includes('/invite/')
+      ? inviteToken.split('/invite/').pop()
+      : inviteToken;
+
+    return `https://devoter.devotech.com.br/invite/${cleanToken}`;
+  };
+
   // Copiar link para área de transferência
   const handleCopyLink = (campaignId: string, inviteToken?: string) => {
     if (!inviteToken) return toast.error("Nenhum link disponível. Gere o convite primeiro.");
-    navigator.clipboard.writeText(inviteToken);
+
+    const fullUrl = getFullInviteUrl(inviteToken);
+    navigator.clipboard.writeText(fullUrl);
     setCopiedMap(prev => ({ ...prev, [campaignId]: true }));
     setTimeout(() => setCopiedMap(prev => ({ ...prev, [campaignId]: false })), 2000);
     toast.success("Link copiado para a área de transferência!");
@@ -109,15 +146,17 @@ const Invites = () => {
   // Compartilhar no WhatsApp
   const handleShareWhatsApp = (campaign: any) => {
     if (!campaign.inviteToken) return toast.error("Nenhum link disponível. Gere o convite primeiro.");
+
+    const fullUrl = getFullInviteUrl(campaign.inviteToken);
     const inviteText = `Olá! ${campaign.inviter?.name || ''} está te convidando para participar da campanha politica de ${campaign.name}. Clique no link para participar!`;
-    const encodedText = encodeURIComponent(`${inviteText}\n\n${campaign.inviteToken}`);
+    const encodedText = encodeURIComponent(`${inviteText}\n\n${fullUrl}`);
     const whatsappUrl = `https://wa.me/?text=${encodedText}`;
     window.open(whatsappUrl, "_blank");
   };
 
   if (loading) {
     return (
-      <div className="flex bg-white dark:bg-gray-900  h-screen">
+      <div className="flex bg-white dark:bg-gray-900 h-screen">
         <Sidebar />
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
@@ -160,6 +199,18 @@ const Invites = () => {
                         <div className="flex-1">
                           <h2 className="text-2xl font-semibold text-gray-800 dark:text-white">{campaign.name}</h2>
                           <p className="mt-2 text-gray-600 dark:text-gray-400">{campaign.description}</p>
+
+                          {/* 🔧 ADICIONA: Status do link */}
+                          {campaign.inviteToken && (
+                            <div className="mt-2">
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                                ✅ Link ativo
+                              </span>
+                              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                Este link é permanente até você gerar um novo
+                              </p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -167,18 +218,22 @@ const Invites = () => {
                     {/* Corpo do Card */}
                     <div className="p-6 space-y-4">
                       {/* Input do link */}
+                      {/* Input do link */}
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Link do Convite</label>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Link do Convite {campaign.inviteToken && "🔗"}
+                        </label>
                         <div className="flex gap-2">
                           <input
                             type="text"
-                            value={campaign.inviteToken || ''}
+                            value={campaign.inviteToken ? getFullInviteUrl(campaign.inviteToken) : 'Clique em "Gerar Link" para criar um convite'}
                             readOnly
-                            className="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white"
+                            className="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white text-sm"
                           />
                           <button
                             onClick={() => handleCopyLink(campaign.id, campaign.inviteToken)}
-                            className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                            disabled={!campaign.inviteToken}
+                            className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Copiar link"
                           >
                             {copiedMap[campaign.id] ? <CheckCheck className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5 text-gray-600 dark:text-gray-400" />}
@@ -189,9 +244,11 @@ const Invites = () => {
                       {/* QR Code */}
                       {campaign.inviteToken && (
                         <div className="flex flex-col justify-center items-center mt-4">
-                          <label className="block text-center text-xl font-medium text-gray-700 dark:text-gray-300 mb-2">Escaneie o QRCode para o seu link de convite ou compartilhe pelo whatsapp</label>
+                          <label className="block text-center text-xl font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Escaneie o QRCode para o seu link de convite
+                          </label>
                           <QRCode
-                            value={campaign.inviteToken}
+                            value={getFullInviteUrl(campaign.inviteToken)}
                             size={250}
                             bgColor={darkMode ? "#1F2937" : "#ffffff"}
                             fgColor={darkMode ? "#ffffff" : "#000000"}
@@ -203,30 +260,46 @@ const Invites = () => {
                       <div className="flex flex-col sm:flex-row gap-4">
                         <button
                           onClick={() => handleShareWhatsApp(campaign)}
-                          className="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg text-white bg-green-500"
+                          disabled={!campaign.inviteToken}
+                          className="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg text-white bg-green-500 hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                           <Share className="w-5 h-5" /> Compartilhar no WhatsApp
                         </button>
 
                         <button
                           onClick={() => handleGenerateInvite(campaign.id)}
-                          className="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-700 dark:text-gray-300"
+                          disabled={loading}
+                          className="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-700 dark:text-gray-300 disabled:opacity-50"
                         >
-                          {campaign.inviteToken ? 'Regenerar Link' : 'Gerar Link'}
+                          {loading ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                          ) : campaign.inviteToken ? (
+                            '🔄 Regenerar Link'
+                          ) : (
+                            '✨ Gerar Link'
+                          )}
                         </button>
                       </div>
+
+                      {/* 🔧 ADICIONA: Aviso sobre regeneração */}
+                      {campaign.inviteToken && (
+                        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                          <p className="text-yellow-800 dark:text-yellow-200 text-sm">
+                            ⚠️ <strong>Atenção:</strong> Ao regenerar o link, o link atual será invalidado e não funcionará mais.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))
               ) : (
                 <div className="p-6 text-center bg-white dark:bg-gray-800 rounded-xl shadow-lg">
-                 {user?.role != "admin" && (
+                  {user?.role != "admin" && (
                     <p className="text-gray-600 dark:text-gray-400">
                       Você ainda não está vinculado a nenhuma campanha. Entre em contato com o administrador para obter um convite.
                     </p>
                   )
-
-                 }
+                  }
                   {user?.role == "admin" && (
                     <button
                       onClick={() => (window.location.href = "/campanhas")}

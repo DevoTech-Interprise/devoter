@@ -1,11 +1,11 @@
 // src/pages/Schedule/ScheduleCalendar.tsx
 import React, { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  Plus, 
-  Calendar, 
-  List, 
-  ChevronLeft, 
+import {
+  Plus,
+  Calendar,
+  List,
+  ChevronLeft,
   ChevronRight,
   MapPin,
   Clock
@@ -105,21 +105,57 @@ export const ScheduleCalendar: React.FC = () => {
     setCurrentDate(new Date());
   };
 
+  // No componente ScheduleCalendar, substitua a função getEventsForDay:
+
   const getEventsForDay = (day: number) => {
     const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+    date.setHours(0, 0, 0, 0);
+
+    const nextDay = new Date(date);
+    nextDay.setDate(date.getDate() + 1);
+
     return filteredEvents.filter(event => {
-      const eventDate = new Date(event.start_date);
-      return eventDate.getDate() === date.getDate() &&
-             eventDate.getMonth() === date.getMonth() &&
-             eventDate.getFullYear() === date.getFullYear();
+      const eventStart = new Date(event.start_date);
+      const eventEnd = new Date(event.end_date);
+
+      eventStart.setHours(0, 0, 0, 0);
+      eventEnd.setHours(0, 0, 0, 0);
+
+      // Verifica se o evento ocorre neste dia específico
+      // Um evento aparece no dia se:
+      // 1. Começa neste dia OU
+      // 2. Termina neste dia OU  
+      // 3. Está em andamento (começa antes e termina depois deste dia)
+      return (eventStart <= date && eventEnd >= date) ||
+        (eventStart.getTime() === date.getTime()) ||
+        (eventEnd.getTime() === date.getTime()) ||
+        (eventStart <= date && eventEnd >= nextDay);
     });
+  };
+
+  // E também adicione uma função para verificar se o evento é multi-dia
+  const isMultiDayEvent = (event: any) => {
+    const start = new Date(event.start_date);
+    const end = new Date(event.end_date);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+    return start.getTime() !== end.getTime();
+  };
+
+  // E uma função para obter a duração em dias
+  const getEventDurationInDays = (event: any) => {
+    const start = new Date(event.start_date);
+    const end = new Date(event.end_date);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+    return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
   };
 
   const isToday = (day: number) => {
     const today = new Date();
     return day === today.getDate() &&
-           currentDate.getMonth() === today.getMonth() &&
-           currentDate.getFullYear() === today.getFullYear();
+      currentDate.getMonth() === today.getMonth() &&
+      currentDate.getFullYear() === today.getFullYear();
   };
 
   // Gerar dias do calendário
@@ -176,71 +212,69 @@ export const ScheduleCalendar: React.FC = () => {
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-gray-900">
       <Sidebar />
-      
+
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <main className="flex-1 overflow-y-auto">
-          <div className="py-15">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="py-15 md:py-6 lg:py-8">
+            <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8">
               {/* Header */}
-              <div className="mb-8">
-                <div className="flex flex-col md:flex-row gap-5  justify-between items-center">
-                  <div>
-                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              <div className="mb-6 md:mb-8">
+                <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
+                  <div className="w-full md:w-auto">
+                    <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">
                       Agenda do Político
                     </h1>
-                    <p className="text-gray-600 dark:text-gray-400 mt-2">
-                      {user?.role === 'super' 
-                        ? 'Visualizando todas as campanhas' 
+                    <p className="text-sm md:text-base text-gray-600 dark:text-gray-400 mt-1 md:mt-2">
+                      {user?.role === 'super'
+                        ? 'Visualizando todas as campanhas'
                         : `Agenda da campanha ${user?.campaign_id || 'atual'}`}
                     </p>
                   </div>
-                  
+
                   {canCreate && (
                     <Link
                       to="/schedule/create"
-                      className="flex w-45 md:w-auto items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                      className="flex w-full md:w-auto items-center justify-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm md:text-base"
                     >
-                      <Plus className="w-5 h-5 mr-2" />
+                      <Plus className="w-4 h-4 md:w-5 md:h-5 mr-2" />
                       Novo Evento
                     </Link>
                   )}
                 </div>
 
                 {/* Filtros e Controles */}
-                <div className="mt-6 flex flex-col sm:flex-row gap-4">
+                <div className="mt-4 md:mt-6 flex flex-col sm:flex-row gap-3">
                   {/* View Mode Toggle */}
-                  <div className="flex w-55 md:w-auto bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg p-1">
+                  <div className="flex w-full sm:w-auto bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg p-1">
                     <button
                       onClick={() => setViewMode('calendar')}
-                      className={`flex items-center px-3 py-2 rounded ${
-                        viewMode === 'calendar' 
-                          ? 'bg-blue-500 text-white' 
-                          : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                      }`}
+                      className={`flex flex-1 sm:flex-initial items-center justify-center px-3 py-2 rounded text-sm ${viewMode === 'calendar'
+                        ? 'bg-blue-500 text-white'
+                        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                        }`}
                     >
-                      <Calendar className="w-4 h-4 mr-2" />
+                      <Calendar className="w-3 h-3 md:w-4 md:h-4 mr-2" />
                       Calendário
                     </button>
                     <button
                       onClick={() => setViewMode('list')}
-                      className={`flex items-center px-3 py-2 rounded ${
-                        viewMode === 'list' 
-                          ? 'bg-blue-500 text-white' 
-                          : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                      }`}
+                      className={`flex flex-1 sm:flex-initial items-center justify-center px-3 py-2 rounded text-sm ${viewMode === 'list'
+                        ? 'bg-blue-500 text-white'
+                        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                        }`}
                     >
-                      <List className="w-4 h-4 mr-2" />
+                      <List className="w-3 h-3 md:w-4 md:h-4 mr-2" />
                       Lista
                     </button>
                   </div>
 
                   {/* Filtros */}
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                     <select
                       value={filterStatus}
                       onChange={(e) => setFilterStatus(e.target.value as any)}
-                      className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                     >
                       <option value="all">Todos os status</option>
                       <option value="confirmed">Confirmados</option>
@@ -251,7 +285,7 @@ export const ScheduleCalendar: React.FC = () => {
                     <select
                       value={filterType}
                       onChange={(e) => setFilterType(e.target.value as any)}
-                      className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                     >
                       <option value="all">Todos os tipos</option>
                       <option value="meeting">Reunião</option>
@@ -264,7 +298,7 @@ export const ScheduleCalendar: React.FC = () => {
                 </div>
 
                 {/* Stats */}
-                <div className="mt-4 flex items-center space-x-4 text-sm text-gray-600 dark:text-gray-400">
+                <div className="mt-3 md:mt-4 flex items-center space-x-4 text-xs md:text-sm text-gray-600 dark:text-gray-400">
                   <span>
                     {filteredEvents.length} evento{filteredEvents.length !== 1 ? 's' : ''} encontrado{filteredEvents.length !== 1 ? 's' : ''}
                   </span>
@@ -272,57 +306,57 @@ export const ScheduleCalendar: React.FC = () => {
               </div>
 
               {error && (
-                <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                  <p className="text-red-600 dark:text-red-400">{error}</p>
+                <div className="mb-4 md:mb-6 p-3 md:p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                  <p className="text-red-600 dark:text-red-400 text-sm">{error}</p>
                 </div>
               )}
 
               {/* Conteúdo */}
               {viewMode === 'list' ? (
-                /* Vista de Lista */
-                <div className="space-y-4">
+                /* Vista de Lista - Melhorada para mobile */
+                <div className="space-y-3 md:space-y-4">
                   {filteredEvents.map((event) => (
-                    <div key={event.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-                      <div className="flex flex-col lg:flex-row lg:items-start gap-4">
+                    <div key={event.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-sm md:shadow-md p-4 md:p-6">
+                      <div className="flex flex-col gap-3 md:gap-4">
                         <div className="flex-1">
-                          <div className="flex items-start justify-between mb-2">
-                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                          <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-2 gap-2">
+                            <h3 className="text-base md:text-lg font-semibold text-gray-900 dark:text-white break-words">
                               {event.title}
                             </h3>
-                            <div className="flex items-center space-x-2">
+                            <div className="flex flex-wrap gap-1 sm:gap-2">
                               <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(event.status)}`}>
-                                {event.status === 'confirmed' ? 'Confirmado' : 
-                                 event.status === 'pending' ? 'Pendente' : 'Cancelado'}
+                                {event.status === 'confirmed' ? 'Confirmado' :
+                                  event.status === 'pending' ? 'Pendente' : 'Cancelado'}
                               </span>
                               <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getEventTypeColor(event.event_type)}`}>
                                 {event.event_type === 'meeting' ? 'Reunião' :
-                                 event.event_type === 'campaign' ? 'Campanha' :
-                                 event.event_type === 'speech' ? 'Discurso' :
-                                 event.event_type === 'visit' ? 'Visita' : 'Outro'}
+                                  event.event_type === 'campaign' ? 'Campanha' :
+                                    event.event_type === 'speech' ? 'Discurso' :
+                                      event.event_type === 'visit' ? 'Visita' : 'Outro'}
                               </span>
                             </div>
                           </div>
-                          
-                          <p className="text-gray-600 dark:text-gray-300 mb-3">
+
+                          <p className="text-sm md:text-base text-gray-600 dark:text-gray-300 mb-3 line-clamp-2">
                             {event.description}
                           </p>
-                          
-                          <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
+
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs md:text-sm text-gray-500 dark:text-gray-400">
                             <div className="flex items-center">
-                              <Calendar className="w-4 h-4 mr-1" />
+                              <Calendar className="w-3 h-3 md:w-4 md:h-4 mr-1" />
                               <span>{formatDate(event.start_date)}</span>
                             </div>
-                            <span>•</span>
+                            <span className="hidden sm:inline">•</span>
                             <div className="flex items-center">
                               <span>📍 {event.location}</span>
                             </div>
                           </div>
                         </div>
-                        
-                        <div className="flex items-center space-x-2">
+
+                        <div className="flex justify-end">
                           <Link
                             to={`/schedule/${event.id}`}
-                            className="px-3 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm transition-colors"
+                            className="w-full sm:w-auto px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm transition-colors text-center"
                           >
                             Ver Detalhes
                           </Link>
@@ -332,22 +366,22 @@ export const ScheduleCalendar: React.FC = () => {
                   ))}
 
                   {filteredEvents.length === 0 && (
-                    <div className="text-center py-12">
-                      <Calendar className="w-24 h-24 text-gray-400 mx-auto mb-4" />
+                    <div className="text-center py-8 md:py-12">
+                      <Calendar className="w-16 h-16 md:w-24 md:h-24 text-gray-400 mx-auto mb-3 md:mb-4" />
                       <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
                         Nenhum evento encontrado
                       </h3>
-                      <p className="text-gray-500 dark:text-gray-400 mb-4">
-                        {canCreate 
-                          ? 'Comece criando o primeiro evento da agenda' 
+                      <p className="text-gray-500 dark:text-gray-400 mb-4 text-sm md:text-base">
+                        {canCreate
+                          ? 'Comece criando o primeiro evento da agenda'
                           : 'Ainda não há eventos agendados para esta campanha'}
                       </p>
                       {canCreate && (
                         <Link
                           to="/schedule/create"
-                          className="inline-flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                          className="inline-flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm md:text-base"
                         >
-                          <Plus className="w-5 h-5 mr-2" />
+                          <Plus className="w-4 h-4 md:w-5 md:h-5 mr-2" />
                           Criar Primeiro Evento
                         </Link>
                       )}
@@ -355,106 +389,138 @@ export const ScheduleCalendar: React.FC = () => {
                   )}
                 </div>
               ) : (
-                /* Vista de Calendário COMPLETA */
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
+                /* Vista de Calendário - OTIMIZADA PARA MOBILE */
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm md:shadow-md overflow-hidden">
                   {/* Cabeçalho do Calendário */}
-                  <div className="flex flex-col sm:flex-row justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center space-x-4 mb-4 sm:mb-0">
-                      <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  <div className="flex flex-col sm:flex-row justify-between items-center p-4 md:p-6 border-b border-gray-200 dark:border-gray-700 gap-3">
+                    <div className="flex items-center space-x-3">
+                      <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white">
                         {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
                       </h2>
                       <button
                         onClick={goToToday}
-                        className="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                        className="px-3 py-1 text-xs md:text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                       >
                         Hoje
                       </button>
                     </div>
-                    
-                    <div className="flex items-center space-x-2">
+
+                    <div className="flex items-center space-x-1 md:space-x-2">
                       <button
                         onClick={() => navigateMonth('prev')}
-                        className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        className="p-1 md:p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                       >
-                        <ChevronLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                        <ChevronLeft className="w-4 h-4 md:w-5 md:h-5 text-gray-600 dark:text-gray-400" />
                       </button>
                       <button
                         onClick={() => navigateMonth('next')}
-                        className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        className="p-1 md:p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                       >
-                        <ChevronRight className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                        <ChevronRight className="w-4 h-4 md:w-5 md:h-5 text-gray-600 dark:text-gray-400" />
                       </button>
                     </div>
                   </div>
 
-                  {/* Dias da semana */}
+                  {/* Dias da semana - Ajustado para mobile */}
                   <div className="grid grid-cols-7 border-b border-gray-200 dark:border-gray-700">
                     {dayNames.map(day => (
-                      <div key={day} className="p-4 text-center text-sm font-medium text-gray-500 dark:text-gray-400 border-r border-gray-200 dark:border-gray-700 last:border-r-0">
-                        {day}
+                      <div key={day} className="p-2 md:p-4 text-center text-xs md:text-sm font-medium text-gray-500 dark:text-gray-400 border-r border-gray-200 dark:border-gray-700 last:border-r-0">
+                        {day.substring(0, 1)}
+                        <span className="hidden sm:inline">{day.substring(1)}</span>
                       </div>
                     ))}
                   </div>
 
-                  {/* Grid do calendário */}
+                  {/* Grid do calendário - OTIMIZADO PARA MOBILE */}
                   <div className="grid grid-cols-7">
                     {calendarDays.map(({ day, isCurrentMonth }, index) => {
                       const dayEvents = getEventsForDay(day);
                       const isTodayFlag = isCurrentMonth && isToday(day);
-                      
+
                       return (
                         <div
                           key={index}
-                          className={`min-h-[120px] p-2 border-r border-b border-gray-200 dark:border-gray-700 last:border-r-0
-                            ${isCurrentMonth 
-                              ? 'bg-white dark:bg-gray-800' 
+                          className={`min-h-[80px] md:min-h-[120px] p-1 md:p-2 border-r border-b border-gray-200 dark:border-gray-700 last:border-r-0
+                            ${isCurrentMonth
+                              ? 'bg-white dark:bg-gray-800'
                               : 'bg-gray-50 dark:bg-gray-900 text-gray-400 dark:text-gray-600'
                             }
                             ${isTodayFlag ? 'bg-blue-50 dark:bg-blue-900/20' : ''}
                           `}
                         >
-                          <div className={`flex justify-between items-start mb-1 ${
-                            !isCurrentMonth ? 'opacity-50' : ''
-                          }`}>
-                            <span className={`text-sm font-medium ${
-                              isTodayFlag 
-                                ? 'bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center'
-                                : 'text-gray-900 dark:text-white'
+                          <div className={`flex justify-between items-start mb-1 ${!isCurrentMonth ? 'opacity-50' : ''
                             }`}>
+                            <span className={`text-xs md:text-sm font-medium ${isTodayFlag
+                              ? 'bg-blue-500 text-white w-5 h-5 md:w-6 md:h-6 rounded-full flex items-center justify-center'
+                              : 'text-gray-900 dark:text-white'
+                              }`}>
                               {day}
                             </span>
                             {isCurrentMonth && canCreate && (
                               <Link
                                 to="/schedule/create"
-                                className="w-5 h-5 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-blue-600 transition-colors opacity-0 hover:opacity-100"
+                                className="w-4 h-4 md:w-5 md:h-5 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-blue-600 transition-colors opacity-0 hover:opacity-100"
                                 title="Adicionar evento"
                               >
-                                <Plus className="w-3 h-3" />
+                                <Plus className="w-2 h-2 md:w-3 md:h-3" />
                               </Link>
                             )}
                           </div>
-                          
-                          {/* Eventos do dia */}
-                          <div className="space-y-1 max-h-20 overflow-y-auto">
-                            {dayEvents.slice(0, 3).map((event, eventIndex) => (
-                              <div
-                                key={eventIndex}
-                                className={`p-1 rounded text-xs cursor-pointer transition-colors ${getEventTypeColor(event.event_type)} hover:opacity-80`}
-                                onClick={() => setSelectedEvent(event)}
-                              >
-                                <div className="flex items-center space-x-1">
-                                  <div className={`w-2 h-2 rounded-full ${getEventTypeDotColor(event.event_type)}`}></div>
-                                  <span className="font-medium truncate">{event.title}</span>
+
+                          {/* Eventos do dia - Simplificado para mobile */}
+                          <div className="space-y-0.5 max-h-12 md:max-h-20 overflow-y-auto">
+                            {dayEvents.slice(0, 2).map((event, eventIndex) => {
+                              const isMultiDay = isMultiDayEvent(event);
+                              const eventStart = new Date(event.start_date);
+                              const eventEnd = new Date(event.end_date);
+                              const currentDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+
+                              eventStart.setHours(0, 0, 0, 0);
+                              eventEnd.setHours(0, 0, 0, 0);
+                              currentDay.setHours(0, 0, 0, 0);
+
+                              const isFirstDay = isMultiDay && eventStart.getTime() === currentDay.getTime();
+                              const isLastDay = isMultiDay && eventEnd.getTime() === currentDay.getTime();
+
+                              return (
+                                <div
+                                  key={eventIndex}
+                                  className={`p-1 rounded text-[10px] md:text-xs cursor-pointer transition-colors ${getEventTypeColor(event.event_type)} hover:opacity-80 ${isMultiDay ? 'relative overflow-hidden' : ''
+                                    } ${isFirstDay ? 'border-l-2 border-blue-500' : ''} ${isLastDay ? 'border-r-2 border-red-500' : ''}`}
+                                  onClick={() => setSelectedEvent(event)}
+                                >
+                                  {isMultiDay && (
+                                    <div className={`absolute left-0 top-0 bottom-0 w-1 ${getEventTypeDotColor(event.event_type)}`}></div>
+                                  )}
+                                  <div className="flex items-center space-x-1">
+                                    {!isMultiDay && (
+                                      <div className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full ${getEventTypeDotColor(event.event_type)}`}></div>
+                                    )}
+                                    <span className="font-medium truncate hidden sm:inline">
+                                      {event.title}
+                                    </span>
+                                    <span className="font-medium truncate sm:hidden">
+                                      {event.title.substring(0, 8)}{event.title.length > 8 ? '...' : ''}
+                                    </span>
+                                  </div>
+                                  <div className="hidden md:flex items-center space-x-1 text-gray-600 dark:text-gray-400 mt-0.5">
+                                    <Clock className="w-2.5 h-2.5 md:w-3 md:h-3" />
+                                    <span>
+                                      {isMultiDay ? (
+                                        isFirstDay ? `Início: ${formatTime(event.start_date)}` :
+                                          isLastDay ? `Até: ${formatTime(event.end_date)}` :
+                                            'Todo o dia'
+                                      ) : (
+                                        `${formatTime(event.start_date)} - ${formatTime(event.end_date)}`
+                                      )}
+                                    </span>
+                                  </div>
                                 </div>
-                                <div className="flex items-center space-x-1 text-gray-600 dark:text-gray-400 mt-1">
-                                  <Clock className="w-3 h-3" />
-                                  <span>{formatTime(event.start_date)}</span>
-                                </div>
-                              </div>
-                            ))}
-                            {dayEvents.length > 3 && (
-                              <div className="text-xs text-gray-500 dark:text-gray-400 text-center">
-                                +{dayEvents.length - 3} mais
+                              );
+                            })}
+                            {dayEvents.length > 2 && (
+                              <div className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400 text-center">
+                                +{dayEvents.length - 2} mais
                               </div>
                             )}
                           </div>
@@ -465,74 +531,82 @@ export const ScheduleCalendar: React.FC = () => {
                 </div>
               )}
 
-              {/* Modal de Detalhes do Evento */}
+              {/* Modal de Detalhes do Evento - Melhorado para mobile */}
               {selectedEvent && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-                    <div className="p-6">
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 md:p-4 z-50">
+                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-full w-full md:max-w-md max-h-[95vh] overflow-y-auto">
+                    <div className="p-4 md:p-6">
                       <div className="flex justify-between items-start mb-4">
-                        <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+                        <h3 className="text-lg md:text-xl font-bold text-gray-900 dark:text-white pr-2">
                           {selectedEvent.title}
                         </h3>
                         <button
                           onClick={() => setSelectedEvent(null)}
-                          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors flex-shrink-0"
                         >
-                          <ChevronRight className="w-6 h-6" />
+                          <ChevronRight className="w-5 h-5 md:w-6 md:h-6" />
                         </button>
                       </div>
 
                       <div className="space-y-4">
-                        <div className="flex items-center space-x-2">
+                        <div className="flex flex-wrap gap-2">
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(selectedEvent.status)}`}>
-                            {selectedEvent.status === 'confirmed' ? 'Confirmado' : 
-                             selectedEvent.status === 'pending' ? 'Pendente' : 'Cancelado'}
+                            {selectedEvent.status === 'confirmed' ? 'Confirmado' :
+                              selectedEvent.status === 'pending' ? 'Pendente' : 'Cancelado'}
                           </span>
                           <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getEventTypeColor(selectedEvent.event_type)}`}>
                             {selectedEvent.event_type === 'meeting' ? 'Reunião' :
-                             selectedEvent.event_type === 'campaign' ? 'Campanha' :
-                             selectedEvent.event_type === 'speech' ? 'Discurso' :
-                             selectedEvent.event_type === 'visit' ? 'Visita' : 'Outro'}
+                              selectedEvent.event_type === 'campaign' ? 'Campanha' :
+                                selectedEvent.event_type === 'speech' ? 'Discurso' :
+                                  selectedEvent.event_type === 'visit' ? 'Visita' : 'Outro'}
                           </span>
                         </div>
 
-                        <p className="text-gray-600 dark:text-gray-300">
+                        <p className="text-sm md:text-base text-gray-600 dark:text-gray-300">
                           {selectedEvent.description}
                         </p>
 
-                        <div className="space-y-2">
-                          <div className="flex items-center space-x-3">
-                            <Calendar className="w-5 h-5 text-gray-400" />
+                        <div className="space-y-3">
+                          <div className="flex items-start space-x-3">
+                            <Calendar className="w-4 h-4 md:w-5 md:h-5 text-gray-400 mt-0.5 flex-shrink-0" />
                             <div>
                               <p className="text-sm font-medium text-gray-900 dark:text-white">
                                 {formatDate(selectedEvent.start_date)}
+                                {isMultiDayEvent(selectedEvent) && (
+                                  <span className="text-blue-500 ml-2 text-xs">(Evento de múltiplos dias)</span>
+                                )}
                               </p>
                               {selectedEvent.end_date && (
-                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">
                                   até {formatDate(selectedEvent.end_date)}
+                                  {isMultiDayEvent(selectedEvent) && (
+                                    <span className="block text-xs text-gray-400">
+                                      Duração: {getEventDurationInDays(selectedEvent)} dia{getEventDurationInDays(selectedEvent) !== 1 ? 's' : ''}
+                                    </span>
+                                  )}
                                 </p>
                               )}
                             </div>
                           </div>
 
-                          <div className="flex items-center space-x-3">
-                            <MapPin className="w-5 h-5 text-gray-400" />
-                            <span className="text-sm text-gray-600 dark:text-gray-300">
+                          <div className="flex items-start space-x-3">
+                            <MapPin className="w-4 h-4 md:w-5 md:h-5 text-gray-400 mt-0.5 flex-shrink-0" />
+                            <span className="text-sm text-gray-600 dark:text-gray-300 break-words">
                               {selectedEvent.location}
                             </span>
                           </div>
                         </div>
 
-                        <div className="flex space-x-3 pt-4">
+                        <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3 pt-4">
                           <Link
                             to={`/schedule/${selectedEvent.id}`}
-                            className="flex-1 bg-blue-500 text-white text-center py-2 rounded-lg hover:bg-blue-600 transition-colors"
+                            className="flex-1 bg-blue-500 text-white text-center py-2 rounded-lg hover:bg-blue-600 transition-colors text-sm md:text-base"
                           >
                             Ver Detalhes
                           </Link>
                           <button
                             onClick={() => setSelectedEvent(null)}
-                            className="flex-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 py-2 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
+                            className="flex-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 py-2 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors text-sm md:text-base"
                           >
                             Fechar
                           </button>

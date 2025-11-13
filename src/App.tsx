@@ -68,6 +68,8 @@ function App() {
             <Route path="/esqueci-a-senha" element={<ForgotPassword />} />
             <Route path="/termos" element={<Terms />} />
             <Route path="/privacidade" element={<PrivacyPolicy />} />
+            <Route path="/invite/:token" element={<InvitePage />} />
+
 
             {/* Páginas privadas */}
             <Route
@@ -77,14 +79,6 @@ function App() {
                   <Dashboard />
                 </PrivateRoute>
               }
-            />
-            <Route
-              path="/invite/:token"
-              element={<InvitePage />}
-            />
-            <Route
-              path="/invite"
-              element={<InvitePage />}
             />
             <Route
               path="/convites"
