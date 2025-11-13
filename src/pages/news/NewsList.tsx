@@ -3,14 +3,18 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Search, Filter, Grid, List } from 'lucide-react';
 import { useNews } from '../../pages/hooks/useNews';
+import { useUser } from '../../context/UserContext';
 import { NewsCard } from '../../components/newsCard';
 import Sidebar from '../../components/Sidebar';
 
 export const NewsList: React.FC = () => {
   const { news, loading, error } = useNews();
+  const { user } = useUser();
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Verificar se o usuário pode criar notícias
+  const canCreateNews = user && (user.role === 'super' || user.role === 'admin' || user.role === 'manager');
 
   // Filtrar notícias baseado no termo de busca
   const filteredNews = news.filter(newsItem =>
@@ -65,13 +69,16 @@ export const NewsList: React.FC = () => {
                   </div>
                 </div>
                 
-                <Link
-                  to="/news/create"
-                  className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                >
-                  <Plus className="w-5 h-5 mr-2" />
-                  Nova Notícia
-                </Link>
+                {/* Botão Nova Notícia - apenas para usuários autorizados */}
+                {canCreateNews && (
+                  <Link
+                    to="/news/create"
+                    className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                  >
+                    <Plus className="w-5 h-5 mr-2" />
+                    Nova Notícia
+                  </Link>
+                )}
               </div>
 
               {/* Search and Filter */}
@@ -210,15 +217,19 @@ export const NewsList: React.FC = () => {
                       Nenhuma notícia encontrada
                     </h3>
                     <p className="text-gray-500 dark:text-gray-400 mb-4">
-                      Comece criando a primeira notícia
+                      {canCreateNews 
+                        ? 'Comece criando a primeira notícia' 
+                        : 'Ainda não há notícias publicadas'}
                     </p>
-                    <Link
-                      to="/news/create"
-                      className="inline-flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                    >
-                      <Plus className="w-5 h-5 mr-2" />
-                      Criar Primeira Notícia
-                    </Link>
+                    {canCreateNews && (
+                      <Link
+                        to="/news/create"
+                        className="inline-flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                      >
+                        <Plus className="w-5 h-5 mr-2" />
+                        Criar Primeira Notícia
+                      </Link>
+                    )}
                   </>
                 )}
               </div>

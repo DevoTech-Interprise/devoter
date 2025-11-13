@@ -1,171 +1,189 @@
-// src/hooks/useSchedule.ts
-import { useState, useEffect } from 'react';
-import { type ScheduleEvent, scheduleService } from '../../services/scheduleService';
-import type { ScheduleEventFormData, UpdateScheduleEventFormData } from '../../schemas/schedule';
+// src/pages/hooks/useSchedule.ts
+import { useState, useEffect, useCallback } from 'react';
+import { scheduleService, type ScheduleEvent, type CreateScheduleEvent, type UpdateScheduleEvent } from '../../services/scheduleService';
 import { useUser } from '../../context/UserContext';
 
 export const useSchedule = () => {
+  const { user } = useUser();
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { user } = useUser();
 
-  const loadEvents = async () => {
+  // Carregar todos os eventos
+  const loadEvents = useCallback(async () => {
+    if (!user) return;
+
     setLoading(true);
     setError(null);
+    
     try {
-      let eventsData: ScheduleEvent[];
+      let eventsData: ScheduleEvent[] = [];
 
-      if (user?.role === 'super') {
-        // Super vê todos os eventos
+      if (user.role === 'super') {
+        // Super usuário vê todos os eventos
         eventsData = await scheduleService.getAllEvents();
-      } else if (user?.campaign_id) {
+      } else if (user.campaign_id) {
         // Usuários normais veem apenas eventos da sua campanha
         eventsData = await scheduleService.getEventsByCampaign(user.campaign_id);
-      } else {
-        eventsData = [];
-      }
+      } 
+      // else {
+      //   // Se não tem campanha, busca eventos onde é participante
+      //   eventsData = await scheduleService.getUserEvents(user.id);
+      // }
 
       setEvents(eventsData);
-    } catch (err) {
-      setError('Erro ao carregar agenda');
-      console.error('Error loading events:', err);
+    } catch (err: any) {
+      setError(err.message || 'Erro ao carregar eventos');
+      console.error('Erro ao carregar eventos:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
+  // Carregar eventos na inicialização
   useEffect(() => {
     loadEvents();
-  }, [user?.campaign_id]);
+  }, [loadEvents]);
 
-  const createEvent = async (eventData: ScheduleEventFormData): Promise<boolean> => {
+  // Buscar evento por ID
+  const getEventById = useCallback(async (id: string): Promise<ScheduleEvent | null> => {
+    try {
+      const event = await scheduleService.getEventById(id);
+      return event;
+    } catch (err: any) {
+      setError(err.message || 'Erro ao buscar evento');
+      console.error('Erro ao buscar evento:', err);
+      return null;
+    }
+  }, []);
+
+  // Criar evento
+  const createEvent = useCallback(async (eventData: CreateScheduleEvent): Promise<ScheduleEvent | null> => {
     if (!user) {
       setError('Usuário não autenticado');
-      return false;
+      return null;
     }
 
     setLoading(true);
     setError(null);
+
     try {
-      await scheduleService.createEvent(eventData, user.id);
-      await loadEvents();
-      return true;
-    } catch (err) {
-      setError('Erro ao criar evento');
-      console.error('Error creating event:', err);
-      return false;
+      // Adiciona o usuário atual como criador
+      const eventWithUser = {
+        ...eventData,
+        created_by: user.id,
+        status: 'pending' as const, // Status padrão
+      };
+
+      const newEvent = await scheduleService.createEvent(eventWithUser);
+      await loadEvents(); // Recarregar lista
+      return newEvent;
+    } catch (err: any) {
+      setError(err.message || 'Erro ao criar evento');
+      console.error('Erro ao criar evento:', err);
+      return null;
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, loadEvents]);
 
-  const updateEvent = async (id: string, eventData: UpdateScheduleEventFormData): Promise<boolean> => {
+  // Atualizar evento
+  const updateEvent = useCallback(async (id: string, eventData: UpdateScheduleEvent): Promise<ScheduleEvent | null> => {
     setLoading(true);
     setError(null);
+
     try {
-      const updated = await scheduleService.updateEvent(id, eventData);
-      if (!updated) {
-        setError('Evento não encontrado');
-        return false;
+      const updatedEvent = await scheduleService.updateEvent(id, eventData);
+      if (updatedEvent) {
+        await loadEvents(); // Recarregar lista
       }
-      
-      await loadEvents();
-      return true;
-    } catch (err) {
-      setError('Erro ao atualizar evento');
-      console.error('Error updating event:', err);
-      return false;
+      return updatedEvent;
+    } catch (err: any) {
+      setError(err.message || 'Erro ao atualizar evento');
+      console.error('Erro ao atualizar evento:', err);
+      return null;
     } finally {
       setLoading(false);
     }
-  };
+  }, [loadEvents]);
 
-  const deleteEvent = async (id: string): Promise<boolean> => {
+  // Excluir evento
+  const deleteEvent = useCallback(async (id: string): Promise<boolean> => {
     setLoading(true);
     setError(null);
+
     try {
-      const success = await scheduleService.deleteEvent(id);
-      if (!success) {
-        setError('Evento não encontrado');
-        return false;
-      }
-      
-      await loadEvents();
+      await scheduleService.deleteEvent(id);
+      await loadEvents(); // Recarregar lista
       return true;
-    } catch (err) {
-      setError('Erro ao excluir evento');
-      console.error('Error deleting event:', err);
+    } catch (err: any) {
+      setError(err.message || 'Erro ao excluir evento');
+      console.error('Erro ao excluir evento:', err);
       return false;
     } finally {
       setLoading(false);
     }
-  };
+  }, [loadEvents]);
 
-  const getEventsByDate = async (year: number, month: number): Promise<ScheduleEvent[]> => {
+  // Adicionar participante
+  // const addAttendee = useCallback(async (eventId: string, userId: string): Promise<ScheduleEvent | null> => {
+  //   try {
+  //     const updatedEvent = await scheduleService.addAttendee(eventId, userId);
+  //     if (updatedEvent) {
+  //       await loadEvents(); // Recarregar lista
+  //     }
+  //     return updatedEvent;
+  //   } catch (err: any) {
+  //     setError(err.message || 'Erro ao adicionar participante');
+  //     console.error('Erro ao adicionar participante:', err);
+  //     return null;
+  //   }
+  // }, [loadEvents]);
+
+  // Remover participante
+  // const removeAttendee = useCallback(async (eventId: string, userId: string): Promise<ScheduleEvent | null> => {
+  //   try {
+  //     const updatedEvent = await scheduleService.removeAttendee(eventId, userId);
+  //     if (updatedEvent) {
+  //       await loadEvents(); // Recarregar lista
+  //     }
+  //     return updatedEvent;
+  //   } catch (err: any) {
+  //     setError(err.message || 'Erro ao remover participante');
+  //     console.error('Erro ao remover participante:', err);
+  //     return null;
+  //   }
+  // }, [loadEvents]);
+
+  // Buscar próximos eventos
+  const getUpcomingEvents = useCallback(async (days: number = 7): Promise<ScheduleEvent[]> => {
     try {
-      let eventsData: ScheduleEvent[];
-
-      if (user?.role === 'super') {
-        eventsData = await scheduleService.getEventsByDate(year, month);
-      } else if (user?.campaign_id) {
-        const allEvents = await scheduleService.getEventsByDate(year, month);
-        eventsData = allEvents.filter((event: { campaign_id: any; }) => event.campaign_id === user.campaign_id);
-      } else {
-        eventsData = [];
-      }
-
-      return eventsData;
-    } catch (err) {
-      console.error('Error getting events by date:', err);
-      throw err;
+      return await scheduleService.getUpcomingEvents(days);
+    } catch (err: any) {
+      setError(err.message || 'Erro ao buscar próximos eventos');
+      console.error('Erro ao buscar próximos eventos:', err);
+      return [];
     }
-  };
+  }, []);
 
-  const getUpcomingEvents = async (days: number = 7): Promise<ScheduleEvent[]> => {
+  // Buscar eventos por data
+  const getEventsByDate = useCallback(async (year: number, month: number): Promise<ScheduleEvent[]> => {
     try {
-      let eventsData: ScheduleEvent[];
-
-      if (user?.role === 'super') {
-        eventsData = await scheduleService.getUpcomingEvents(days);
-      } else if (user?.campaign_id) {
-        const allEvents = await scheduleService.getUpcomingEvents(days);
-        eventsData = allEvents.filter((event: { campaign_id: any; }) => event.campaign_id === user.campaign_id);
-      } else {
-        eventsData = [];
-      }
-
-      return eventsData;
-    } catch (err) {
-      console.error('Error getting upcoming events:', err);
-      throw err;
+      return await scheduleService.getEventsByDate(year, month);
+    } catch (err: any) {
+      setError(err.message || 'Erro ao buscar eventos por data');
+      console.error('Erro ao buscar eventos por data:', err);
+      return [];
     }
-  };
+  }, []);
 
-  const addAttendee = async (eventId: string, userId: string): Promise<void> => {
-    try {
-      await scheduleService.addAttendee(eventId, userId);
-      await loadEvents();
-    } catch (err) {
-      console.error('Error adding attendee:', err);
-      throw err;
-    }
-  };
-
-  const removeAttendee = async (eventId: string, userId: string): Promise<void> => {
-    try {
-      await scheduleService.removeAttendee(eventId, userId);
-      await loadEvents();
-    } catch (err) {
-      console.error('Error removing attendee:', err);
-      throw err;
-    }
-  };
-
-  // Limpar erros
-  const clearError = () => {
+  // Limpar erro
+  const clearError = useCallback(() => {
     setError(null);
-  };
+  }, []);
+
+  // Verificar se usuário pode criar eventos
+  const canCreate = user && (user.role === 'super' || user.role === 'admin' || user.role === 'manager');
 
   return {
     // Estado
@@ -173,36 +191,22 @@ export const useSchedule = () => {
     loading,
     error,
     
-    // Ações CRUD
+    // Ações
     createEvent,
     updateEvent,
     deleteEvent,
-    
-    // Buscas
-    getEventsByDate,
+    getEventById,
+    // addAttendee,
+    // removeAttendee,
     getUpcomingEvents,
-    
-    // Participantes
-    addAttendee,
-    removeAttendee,
-    
-    // Utilitários
-    refetch: loadEvents,
+    getEventsByDate,
+    loadEvents,
     clearError,
     
-    // Permissões baseadas no usuário
-    canCreate: !!user && (user.role === 'super' || user.role === 'admin' || user.role === 'manager'),
-    canEdit: (event: ScheduleEvent) => {
-      if (!user) return false;
-      return user.role === 'super' || event.created_by === user.id;
-    },
-    canDelete: (event: ScheduleEvent) => {
-      if (!user) return false;
-      return user.role === 'super' || event.created_by === user.id;
-    },
-    canManageAll: user?.role === 'super',
+    // Permissões
+    canCreate,
     
-    // Informações do usuário
+    // Informações do usuário atual
     currentUser: user
   };
 };

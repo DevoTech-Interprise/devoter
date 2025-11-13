@@ -147,7 +147,6 @@ async resetPassword(data: {
 
     // 4. Limpa os dados de recovery
     localStorage.removeItem('recoveryData');
-    passwordRecoveryService.clearRecoveryToken();
     
     console.log('✅ [ResetPassword] Senha atualizada com sucesso no backend');
     

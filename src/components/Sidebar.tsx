@@ -11,6 +11,7 @@ import {
   Moon,
   Sun,
   ChevronDown,
+  CalendarDays,
   ChevronRight,
   Newspaper as News
 } from "lucide-react";
@@ -301,7 +302,14 @@ const Sidebar = () => {
       icon: <News size={20} />,
       text: "Noticias",
       path: "/news",
-      roles: ["admin", "super","manager", "user"]
+      roles: ["super"]
+    },
+    {
+      type: 'item',
+      icon: <CalendarDays size={20} />,
+      text: "Agendas",
+      path: "/schedule",
+      roles: ["admin", "super","manager"]
     },
 
   ];

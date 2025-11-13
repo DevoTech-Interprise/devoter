@@ -69,8 +69,7 @@ const ForgotPassword: React.FC = () => {
                 throw new Error("Email não encontrado em nossa base de dados.");
             }
 
-            // Se o usuário existe, prossegue com o envio do código
-            const response = await authService.forgotPassword(data);
+            
 
             setUserEmail(data.email);
             setUserId(user.id); // Usa o ID do usuário encontrado
@@ -186,62 +185,7 @@ const ForgotPassword: React.FC = () => {
         }
     };
 
-    // Método alternativo usando o processo completo do service
-    const handleDirectPasswordReset = async (data: ResetPasswordFormData) => {
-        setIsSubmitting(true);
-        clearResetErrors();
 
-        try {
-            console.log('🔄 [Page] Processo direto de recuperação para:', userEmail);
-
-            // Usa o método unificado do service
-            const success = await passwordRecoveryService.processPasswordRecovery(
-                userEmail,
-                data.newPassword
-            );
-
-            if (success) {
-                toast.success("Senha redefinida com sucesso!", {
-                    position: "top-right",
-                    autoClose: 5000,
-                    hideProgressBar: false,
-                    closeOnClick: true,
-                    pauseOnHover: true,
-                    draggable: true,
-                    theme: darkMode ? "dark" : "light",
-                });
-
-                setTimeout(() => {
-                    setUserEmail("");
-                    setUserId(null);
-                    setVerificationToken("");
-                    navigate("/login");
-                }, 2000);
-            } else {
-                throw new Error("Usuário não encontrado");
-            }
-
-        } catch (error: any) {
-            console.error('❌ [Page] Erro no processo direto:', error);
-            
-            toast.error(error.message || "Erro ao redefinir senha. Tente novamente.", {
-                position: "top-right",
-                autoClose: 5000,
-                hideProgressBar: false,
-                closeOnClick: true,
-                pauseOnHover: true,
-                draggable: true,
-                theme: darkMode ? "dark" : "light",
-            });
-
-            setResetError("root", {
-                type: "manual",
-                message: error.message || "Erro ao redefinir senha. Tente novamente."
-            });
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
 
     // Componente para entrada do código de verificação
     const VerificationCodeInput: React.FC = () => {

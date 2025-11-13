@@ -39,7 +39,6 @@ export const NewsForm: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [currentNews, setCurrentNews] = useState<any>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const isEditing = !!id;
 

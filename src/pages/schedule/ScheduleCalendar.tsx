@@ -8,7 +8,6 @@ import {
   ChevronLeft, 
   ChevronRight,
   MapPin,
-  Users,
   Clock
 } from 'lucide-react';
 import { useSchedule } from '../../pages/hooks/useSchedule';
@@ -181,11 +180,11 @@ export const ScheduleCalendar: React.FC = () => {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <main className="flex-1 overflow-y-auto">
-          <div className="py-8">
+          <div className="py-15">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               {/* Header */}
               <div className="mb-8">
-                <div className="flex justify-between items-center">
+                <div className="flex flex-col md:flex-row gap-5  justify-between items-center">
                   <div>
                     <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
                       Agenda do Político
@@ -200,7 +199,7 @@ export const ScheduleCalendar: React.FC = () => {
                   {canCreate && (
                     <Link
                       to="/schedule/create"
-                      className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                      className="flex w-45 md:w-auto items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
                     >
                       <Plus className="w-5 h-5 mr-2" />
                       Novo Evento
@@ -211,7 +210,7 @@ export const ScheduleCalendar: React.FC = () => {
                 {/* Filtros e Controles */}
                 <div className="mt-6 flex flex-col sm:flex-row gap-4">
                   {/* View Mode Toggle */}
-                  <div className="flex bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg p-1">
+                  <div className="flex w-55 md:w-auto bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg p-1">
                     <button
                       onClick={() => setViewMode('calendar')}
                       className={`flex items-center px-3 py-2 rounded ${
@@ -316,10 +315,6 @@ export const ScheduleCalendar: React.FC = () => {
                             <span>•</span>
                             <div className="flex items-center">
                               <span>📍 {event.location}</span>
-                            </div>
-                            <span>•</span>
-                            <div className="flex items-center">
-                              <span>👥 {event.attendees?.length || 0} participantes</span>
                             </div>
                           </div>
                         </div>
@@ -526,15 +521,6 @@ export const ScheduleCalendar: React.FC = () => {
                               {selectedEvent.location}
                             </span>
                           </div>
-
-                          {selectedEvent.attendees && selectedEvent.attendees.length > 0 && (
-                            <div className="flex items-center space-x-3">
-                              <Users className="w-5 h-5 text-gray-400" />
-                              <span className="text-sm text-gray-600 dark:text-gray-300">
-                                {selectedEvent.attendees.length} participante{selectedEvent.attendees.length !== 1 ? 's' : ''}
-                              </span>
-                            </div>
-                          )}
                         </div>
 
                         <div className="flex space-x-3 pt-4">

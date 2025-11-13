@@ -43,7 +43,6 @@ export const NewsDetail: React.FC = () => {
     const [isLiking, setIsLiking] = useState(false);
     const [isAddingComment, setIsAddingComment] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-    const [sidebarOpen, setSidebarOpen] = useState(false);
 
     const {
         register,
