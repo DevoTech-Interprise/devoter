@@ -80,6 +80,32 @@ export const userService = {
     return allUsers.filter(user => user.campaign_id === campaignId);
   },
 
+
+  getUsersByIds: async (userIds: string[]): Promise<User[]> => {
+    try {
+      console.log('🔍 Buscando usuários por IDs:', userIds);
+
+      // Se não há IDs, retorna array vazio
+      if (!userIds || userIds.length === 0) {
+        return [];
+      }
+
+      // Buscar todos os usuários
+      const allUsers = await userService.getAll();
+
+      // Filtrar usuários pelos IDs fornecidos
+      const users = allUsers.filter(user =>
+        userIds.includes(String(user.id))
+      );
+
+      console.log(`✅ Encontrados ${users.length} usuários`);
+      return users;
+    } catch (error) {
+      console.error('❌ Erro ao buscar usuários por IDs:', error);
+      throw error;
+    }
+  },
+
   // No userService.ts, modifique o getNetworkUsersByCampaign para ser mais robusto:
   getNetworkUsersByCampaign: async (campaignId: string): Promise<User[]> => {
     const allUsers = await userService.getAll();

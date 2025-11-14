@@ -1,6 +1,20 @@
 // src/services/newsService.ts
 import api from './api';
 
+export interface Comment {
+  id: string;
+  user_id: string;
+  user_name: string;
+  text: string;
+  created_at: string;
+  user_avatar?: string;
+  is_reply?: boolean;
+  likes?: number;
+  replies?: Comment[];
+  parent_id?: string | null;
+  is_loading?: boolean;
+}
+
 export interface News {
   id: string;
   title: string;
@@ -14,14 +28,6 @@ export interface News {
   likes?: number;
   liked_by?: string[];
   comments?: Comment[];
-}
-
-export interface Comment {
-  id: string;
-  user_id: string;
-  user_name: string;
-  text: string;
-  created_at: string;
 }
 
 export interface CreateNewsData {
@@ -192,6 +198,9 @@ class NewsService {
       throw error;
     }
   }
+
+
+  
 }
 
 export const newsService = new NewsService();
