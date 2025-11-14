@@ -4,6 +4,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'react-toastify';
+import DOMPurify from 'dompurify'; // ⬅️ Adicione esta importação
 import {
     ArrowLeft,
     Calendar,
@@ -67,12 +68,45 @@ export const NewsDetail: React.FC = () => {
 
     const commentText = watch('text');
 
+    // CORREÇÃO: Função para sanitizar e processar o conteúdo HTML
+    const getSanitizedContent = (content: string) => {
+        if (!content) return '';
+        
+        // Debug do conteúdo original
+        console.log('🔍 Conteúdo original:', {
+            content: content.substring(0, 200) + '...',
+            hasHTML: content.includes('<'),
+            hasPTags: content.includes('<p'),
+            hasImgTags: content.includes('<img')
+        });
+
+        // Sanitiza o conteúdo HTML
+        const sanitized = DOMPurify.sanitize(content, {
+            ALLOWED_TAGS: [
+                'p', 'br', 'strong', 'em', 'u', 's', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+                'ul', 'ol', 'li', 'blockquote', 'code', 'pre', 'span', 'div',
+                'img', 'a', 'table', 'thead', 'tbody', 'tr', 'th', 'td'
+            ],
+            ALLOWED_ATTR: [
+                'class', 'style', 'src', 'alt', 'href', 'target', 'rel', 'width', 'height',
+                'data-start', 'data-end', 'data-testid'
+            ],
+            ALLOW_DATA_ATTR: true
+        });
+
+        console.log('✅ Conteúdo sanitizado:', {
+            sanitized: sanitized.substring(0, 200) + '...',
+            length: sanitized.length
+        });
+
+        return sanitized;
+    };
+
     // Carregar notícia
-     useEffect(() => {
+    useEffect(() => {
         const loadNews = async () => {
             if (!id) return;
 
-            // ⚠️ AGUARDAR o usuário estar disponível antes de carregar a notícia
             if (!user) {
                 console.log('⏳ Aguardando usuário carregar...');
                 return;
@@ -86,7 +120,6 @@ export const NewsDetail: React.FC = () => {
                 await getNewsById(id);
                 console.log('✅ NewsDetail: Notícia carregada', currentNews);
 
-                // Carregar informações da campanha se existir
                 if (currentNews?.campaign_id) {
                     console.log('🔄 NewsDetail: Carregando campanha', currentNews.campaign_id);
                     loadCampaignInfo(String(currentNews.campaign_id));
@@ -111,6 +144,7 @@ export const NewsDetail: React.FC = () => {
 
         loadNews();
     }, [id, user, navigate]);
+
     // Limpar erro quando o componente desmontar
     useEffect(() => {
         return () => {
@@ -435,26 +469,23 @@ export const NewsDetail: React.FC = () => {
                                             <Clock className="w-4 h-4 mr-2" />
                                             <span>{getTimeAgo(currentNews.created_at)}</span>
                                         </div>
-
-                                        {/* {campaign && (
-                                            <div className="flex items-center">
-                                                <div className="flex items-center space-x-2 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full">
-                                                    <Building className="w-4 h-4" />
-                                                    <span className="text-sm">{campaign.name}</span>
-                                                </div>
-                                            </div>
-                                        )} */}
-
-                                        {/* <div className="flex items-center">
-                                            <Eye className="w-4 h-4 mr-2" />
-                                            <span>Visualizações: {Math.floor(Math.random() * 1000) + 100}</span>
-                                        </div> */}
                                     </div>
 
-                                    <div
-                                        className="prose prose-lg max-w-none dark:prose-invert mb-6 text-gray-700 dark:text-gray-300"
-                                        dangerouslySetInnerHTML={{ __html: currentNews.content }}
-                                    />
+                                    {/* CORREÇÃO: Conteúdo com sanitização */}
+                                    <div className="news-content-container mb-6">
+                                        {currentNews.content ? (
+                                            <div 
+                                                className="news-content prose prose-lg max-w-none dark:prose-invert text-gray-700 dark:text-gray-300"
+                                                dangerouslySetInnerHTML={{ 
+                                                    __html: getSanitizedContent(currentNews.content)
+                                                }}
+                                            />
+                                        ) : (
+                                            <p className="text-gray-500 dark:text-gray-400 italic">
+                                                Conteúdo não disponível.
+                                            </p>
+                                        )}
+                                    </div>
 
                                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pt-6 border-t border-gray-200 dark:border-gray-700 gap-4">
                                         <div className="flex items-center space-x-6">
