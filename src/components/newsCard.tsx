@@ -8,7 +8,7 @@ import { useUser } from '../context/UserContext';
 import { campaignService, type Campaign } from '../services/campaignService';
 
 interface NewsCardProps {
-  news: News;
+  news: News & { commentsCount?: number }; // ⬅️ Adicione esta tipagem
   onDelete?: (newsId: string) => void;
   isDeleting?: boolean;
 }
@@ -58,8 +58,35 @@ export const NewsCard: React.FC<NewsCardProps> = ({
     });
   };
 
+  // Calcular total de comentários (incluindo replies)
+  const getTotalComments = () => {
+    // Se temos a propriedade commentsCount (abordagem otimizada)
+    if (news.commentsCount !== undefined) {
+      return news.commentsCount;
+    }
+    
+    // Se temos o array de comentários (abordagem completa)
+    if (news.comments && news.comments.length > 0) {
+      return news.comments.reduce((total: number, comment: any) => {
+        return total + 1 + (comment.replies?.length || 0);
+      }, 0);
+    }
+    
+    return 0;
+  };
+
   // Verificar se o usuário atual curtiu a notícia
   const isLiked = user && news.liked_by?.includes(user.id);
+
+  // Debug para verificar os dados
+  console.log('🔍 NewsCard dados:', {
+    id: news.id,
+    title: news.title,
+    likes: news.likes,
+    commentsCount: news.commentsCount,
+    commentsArrayLength: news.comments?.length || 0,
+    getTotalComments: getTotalComments()
+  });
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow relative">
@@ -159,14 +186,14 @@ export const NewsCard: React.FC<NewsCardProps> = ({
             </div>
             
             {/* Badge da campanha - versão mobile/compacta */}
-            {campaign && (
+            {/* {campaign && (
               <div className="flex items-center">
                 <div className="flex items-center space-x-1 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-1 rounded-full">
                   <Building className="w-3 h-3" />
                   <span className="text-xs">{campaign.name}</span>
                 </div>
               </div>
-            )}
+            )} */}
           </div>
         </div>
 
@@ -187,9 +214,10 @@ export const NewsCard: React.FC<NewsCardProps> = ({
               <span>{news.likes || 0}</span>
             </button>
             
+            {/* CORREÇÃO: Usar getTotalComments() em vez de news.comments.length */}
             <div className="flex items-center space-x-1 text-gray-500 dark:text-gray-400">
               <MessageCircle className="w-4 h-4" />
-              <span>{news.comments?.length || 0}</span>
+              <span>{getTotalComments()}</span>
             </div>
           </div>
 

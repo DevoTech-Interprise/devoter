@@ -68,22 +68,31 @@ export const NewsDetail: React.FC = () => {
     const commentText = watch('text');
 
     // Carregar notícia
-    useEffect(() => {
+     useEffect(() => {
         const loadNews = async () => {
             if (!id) return;
+
+            // ⚠️ AGUARDAR o usuário estar disponível antes de carregar a notícia
+            if (!user) {
+                console.log('⏳ Aguardando usuário carregar...');
+                return;
+            }
 
             setIsLoading(true);
             clearError();
 
             try {
+                console.log('🔄 NewsDetail: Iniciando carregamento da notícia', id, 'usuário:', user.id);
                 await getNewsById(id);
+                console.log('✅ NewsDetail: Notícia carregada', currentNews);
 
                 // Carregar informações da campanha se existir
                 if (currentNews?.campaign_id) {
+                    console.log('🔄 NewsDetail: Carregando campanha', currentNews.campaign_id);
                     loadCampaignInfo(String(currentNews.campaign_id));
                 }
             } catch (err: any) {
-                console.error('Erro ao carregar notícia:', err);
+                console.error('❌ NewsDetail: Erro ao carregar notícia:', err);
                 toast.error(err.message || 'Erro ao carregar notícia');
                 navigate('/news');
             } finally {
@@ -101,8 +110,7 @@ export const NewsDetail: React.FC = () => {
         };
 
         loadNews();
-    }, [id, navigate]);
-
+    }, [id, user, navigate]);
     // Limpar erro quando o componente desmontar
     useEffect(() => {
         return () => {
@@ -428,19 +436,19 @@ export const NewsDetail: React.FC = () => {
                                             <span>{getTimeAgo(currentNews.created_at)}</span>
                                         </div>
 
-                                        {campaign && (
+                                        {/* {campaign && (
                                             <div className="flex items-center">
                                                 <div className="flex items-center space-x-2 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full">
                                                     <Building className="w-4 h-4" />
                                                     <span className="text-sm">{campaign.name}</span>
                                                 </div>
                                             </div>
-                                        )}
+                                        )} */}
 
-                                        <div className="flex items-center">
+                                        {/* <div className="flex items-center">
                                             <Eye className="w-4 h-4 mr-2" />
                                             <span>Visualizações: {Math.floor(Math.random() * 1000) + 100}</span>
-                                        </div>
+                                        </div> */}
                                     </div>
 
                                     <div
