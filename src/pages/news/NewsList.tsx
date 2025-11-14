@@ -11,7 +11,7 @@ import { useTheme } from '../../context/ThemeContext';
 export const NewsList: React.FC = () => {
   const { news, loading, error, deleteNews } = useNews();
   const { user } = useUser();
-  const { darkMode } = useTheme();
+  useTheme();
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [isDeleting, setIsDeleting] = useState<string | null>(null);

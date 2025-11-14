@@ -1,7 +1,7 @@
 // src/components/NewsCard.tsx
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Heart, MessageCircle, Eye, Calendar, MoreVertical, Building, Trash2, Edit3 } from 'lucide-react';
+import { Heart, MessageCircle, Eye, Calendar, MoreVertical, Trash2, Edit3 } from 'lucide-react';
 import type { News } from '../services/newsService';
 import { useNews } from '../pages/hooks/useNews';
 import { useUser } from '../context/UserContext';

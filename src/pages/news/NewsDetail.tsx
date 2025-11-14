@@ -13,9 +13,7 @@ import {
     Edit3,
     Trash2,
     Share2,
-    Eye,
     Clock,
-    Building,
     Reply,
     CornerDownLeft
 } from 'lucide-react';
@@ -37,8 +35,6 @@ export const NewsDetail: React.FC = () => {
         likeNews,
         addComment,
         addReply,
-        getNewsLikes,
-        getNewsComments,
         canEdit,
         canDelete,
         loading,
