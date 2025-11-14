@@ -1,4 +1,3 @@
-// src/pages/Schedule/ScheduleForm.tsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -15,15 +14,25 @@ export const ScheduleForm: React.FC = () => {
   const { user } = useUser();
   const { campaigns, loading: campaignsLoading } = useCampaigns();
   
-  const [formData, setFormData] = useState({
+  // Corrigir o tipo do campaign_id para string | null
+  const [formData, setFormData] = useState<{
+    title: string;
+    description: string;
+    start_date: string;
+    end_date: string;
+    location: string;
+    event_type: 'meeting' | 'campaign' | 'speech' | 'visit' | 'other';
+    status: 'confirmed' | 'pending' | 'cancelled';
+    campaign_id: string | null; // Mudar para string | null
+  }>({
     title: '',
     description: '',
     start_date: '',
     end_date: '',
     location: '',
-    event_type: 'meeting' as 'meeting' | 'campaign' | 'speech' | 'visit' | 'other',
-    status: 'pending' as 'confirmed' | 'pending' | 'cancelled',
-    campaign_id: ''
+    event_type: 'meeting',
+    status: 'pending',
+    campaign_id: null // Inicializar como null
   });
 
   const isEditing = Boolean(id);
@@ -33,17 +42,23 @@ export const ScheduleForm: React.FC = () => {
 
   // Definir campanha padrão baseado no usuário
   useEffect(() => {
-    if (!isEditing && user?.campaign_id && campaigns.length > 0) {
-      // Se o usuário tem uma campanha vinculada, usa como padrão
-      const userCampaign = campaigns.find(campaign => campaign.id.toString() === user.campaign_id);
-      if (userCampaign) {
-        setFormData(prev => ({
-          ...prev,
-          campaign_id: userCampaign.id.toString()
-        }));
-      }
+  // Garantir que a campanha do manager seja sempre definida, mesmo se o hook falhar
+  if (!isEditing && user?.role === 'manager' && user.campaign_id) {
+    const shouldSetCampaign = 
+      // Se não há campanhas carregadas mas o usuário tem campaign_id
+      (campaigns.length === 0 && user.campaign_id) ||
+      // Ou se há campanhas mas nenhuma está selecionada
+      (campaigns.length > 0 && !formData.campaign_id);
+    
+    if (shouldSetCampaign) {
+      console.log('Definindo campanha do manager diretamente:', user.campaign_id);
+      setFormData(prev => ({
+        ...prev,
+        campaign_id: user.campaign_id
+      }));
     }
-  }, [user, campaigns, isEditing]);
+  }
+}, [user, campaigns, formData.campaign_id, isEditing]);
 
   // Carregar dados do evento se estiver editando
   useEffect(() => {
@@ -78,7 +93,7 @@ export const ScheduleForm: React.FC = () => {
             location: eventData.location,
             event_type: eventData.event_type,
             status: eventData.status,
-            campaign_id: eventData.campaign_id || ''
+            campaign_id: eventData.campaign_id // Pode ser string ou null
           });
         } else {
           throw new Error('Evento não encontrado');
@@ -96,8 +111,8 @@ export const ScheduleForm: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validação de campanha
-    if (!formData.campaign_id && !canSelectNoCampaign) {
+    // Validação de campanha - para managers, sempre deve ter uma campanha
+    if (!formData.campaign_id && (user?.role !== 'super' && user?.role !== 'admin')) {
       toast.error('Selecione uma campanha para o evento');
       return;
     }
@@ -120,7 +135,7 @@ export const ScheduleForm: React.FC = () => {
           location: formData.location,
           event_type: formData.event_type,
           status: formData.status,
-          campaign_id: formData.campaign_id || null
+          campaign_id: formData.campaign_id // Já é string | null
         };
 
         result = await updateEvent(id, updateData);
@@ -136,7 +151,7 @@ export const ScheduleForm: React.FC = () => {
         const eventData = {
           ...formData,
           created_by: user?.id || '',
-          campaign_id: formData.campaign_id || null
+          campaign_id: formData.campaign_id // Já é string | null
         };
 
         result = await createEvent(eventData);
@@ -155,10 +170,19 @@ export const ScheduleForm: React.FC = () => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    
+    // Para o campaign_id, converter string vazia para null
+    if (name === 'campaign_id') {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value === '' ? null : value
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
   };
 
   return (
@@ -237,10 +261,10 @@ export const ScheduleForm: React.FC = () => {
                     </label>
                     <select
                       name="campaign_id"
-                      value={formData.campaign_id}
+                      value={formData.campaign_id || ''} // Converter null para string vazia
                       onChange={handleChange}
                       required={!canSelectNoCampaign}
-                      disabled={campaignsLoading}
+                      disabled={campaignsLoading || user?.role === 'manager'}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                     >
                       <option value="">{campaignsLoading ? 'Carregando campanhas...' : 'Selecione uma campanha'}</option>
@@ -262,8 +286,10 @@ export const ScheduleForm: React.FC = () => {
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       {user?.role === 'super' 
                         ? 'Você pode selecionar qualquer campanha ou criar evento sem campanha'
-                        : user?.role === 'admin' || user?.role === 'manager'
-                        ? `Você pode selecionar entre suas campanhas${canSelectNoCampaign ? ' ou criar evento sem campanha' : ''}`
+                        : user?.role === 'admin' 
+                        ? 'Você pode selecionar entre suas campanhas ou criar evento sem campanha'
+                        : user?.role === 'manager'
+                        ? 'Você está vinculado a esta campanha'
                         : 'Selecione a campanha para o evento'
                       }
                     </p>

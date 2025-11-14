@@ -32,41 +32,51 @@ export const campaignService = {
   },
 
   async getById(id: string | number): Promise<Campaign> {
-    const response = await api.get(`api/campaigns/${id}`);
+    console.log(`🔍 Buscando campanha por ID: ${id} (tipo: ${typeof id})`);
+
+    // Converter para número se for string
+    const campaignId = typeof id === 'string' ? parseInt(id) : id;
+
+    if (isNaN(campaignId)) {
+      throw new Error(`ID de campanha inválido: ${id}`);
+    }
+
+    const response = await api.get(`api/campaigns/${campaignId}`);
+    console.log(`✅ Resposta da campanha ${campaignId}:`, response.data);
     return response.data;
   },
 
   async getMyCampaigns(userId: string | number, userRole?: string): Promise<Campaign[]> {
-  try {
-    // 🔹 SUPER USER: Retorna TODAS as campanhas
-    if (userRole === 'super') {
-      console.log('👑 SUPER USER: Retornando TODAS as campanhas do sistema');
-      return await this.getAll();
+    try {
+      // 🔹 SUPER USER: Retorna TODAS as campanhas
+      if (userRole === 'super') {
+        console.log('👑 SUPER USER: Retornando TODAS as campanhas do sistema');
+        return await this.getAll();
+      }
+
+      const allCampaigns = await this.getAll();
+
+      // Filtrar campanhas criadas pelo usuário OU onde o usuário é operador
+      const myCampaigns = allCampaigns.filter(campaign => {
+        // Campanhas criadas pelo usuário
+        const isCreator = String(campaign.created_by) === String(userId);
+
+        // Campanhas onde o usuário é operador
+        const isOperator = campaign.operator &&
+          campaign.operator.split(',').some(operatorId =>
+            operatorId.trim() === String(userId)
+          );
+
+        return isCreator || isOperator;
+      });
+
+      console.log(`Encontradas ${myCampaigns.length} campanhas para o usuário ${userId}`);
+      return myCampaigns;
+    } catch (error) {
+      console.error('Erro ao buscar campanhas do usuário:', error);
+      throw error;
     }
-
-    const allCampaigns = await this.getAll();
-    
-    // Filtrar campanhas criadas pelo usuário OU onde o usuário é operador
-    const myCampaigns = allCampaigns.filter(campaign => {
-      // Campanhas criadas pelo usuário
-      const isCreator = String(campaign.created_by) === String(userId);
-      
-      // Campanhas onde o usuário é operador
-      const isOperator = campaign.operator && 
-        campaign.operator.split(',').some(operatorId => 
-          operatorId.trim() === String(userId)
-        );
-      
-      return isCreator || isOperator;
-    });
-
-    console.log(`Encontradas ${myCampaigns.length} campanhas para o usuário ${userId}`);
-    return myCampaigns;
-  } catch (error) {
-    console.error('Erro ao buscar campanhas do usuário:', error);
-    throw error;
-  }
-},
+  },
 
   async create(data: CampaignPayload): Promise<Campaign> {
     const formData = new FormData();
@@ -246,5 +256,5 @@ export const campaignService = {
     return response.data;
   },
 
-  
+
 };
