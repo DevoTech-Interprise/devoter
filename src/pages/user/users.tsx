@@ -23,6 +23,8 @@ import { userService, type User } from '../../services/userService';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useUser } from '../../context/UserContext';
+import PhoneInput from 'react-phone-input-2';
+import 'react-phone-input-2/lib/style.css';
 
 const UserManagement = () => {
   const { darkMode } = useTheme();
@@ -54,10 +56,17 @@ const UserManagement = () => {
     is_active: '1'
   });
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [estados, setEstados] = useState<any[]>([]);
+  const [cidades, setCidades] = useState<any[]>([]);
+  const [editPassword, setEditPassword] = useState({
+    newPassword: '',
+    confirmPassword: ''
+  });
 
   useEffect(() => {
     if (currentUser?.id) {
       loadUsers();
+      loadEstados();
     }
   }, [currentUser]);
 
@@ -65,8 +74,38 @@ const UserManagement = () => {
     filterUsers();
   }, [users, searchTerm, statusFilter, roleFilter]);
 
-  // No componente UserManagement, modifique o loadUsers:
-const loadUsers = async () => {
+  // Carregar estados do IBGE
+  const loadEstados = async () => {
+    try {
+      const response = await fetch('https://servicodados.ibge.gov.br/api/v1/localidades/estados');
+      const data = await response.json();
+      setEstados(data.sort((a: any, b: any) => a.nome.localeCompare(b.nome)));
+    } catch (error) {
+      console.error('Erro ao carregar estados:', error);
+    }
+  };
+
+  // Carregar cidades quando estado for selecionado
+  useEffect(() => {
+    const estadoSelecionado = createForm.state;
+    if (estadoSelecionado) {
+      fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${estadoSelecionado}/municipios`)
+        .then((res) => res.json())
+        .then((data) => setCidades(data.sort((a: any, b: any) => a.nome.localeCompare(b.nome))));
+    }
+  }, [createForm.state]);
+
+  // Carregar cidades para edição quando estado for selecionado
+  useEffect(() => {
+    const estadoSelecionado = editForm.state;
+    if (estadoSelecionado) {
+      fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${estadoSelecionado}/municipios`)
+        .then((res) => res.json())
+        .then((data) => setCidades(data.sort((a: any, b: any) => a.nome.localeCompare(b.nome))));
+    }
+  }, [editForm.state]);
+
+  const loadUsers = async () => {
     try {
       setLoading(true);
 
@@ -108,6 +147,7 @@ const loadUsers = async () => {
       setLoading(false);
     }
   };
+
   const filterUsers = () => {
     let filtered = users;
 
@@ -149,6 +189,10 @@ const loadUsers = async () => {
       city: user.city,
       neighborhood: user.neighborhood
     });
+    setEditPassword({
+      newPassword: '',
+      confirmPassword: ''
+    });
     setShowEditModal(true);
   };
 
@@ -169,9 +213,9 @@ const loadUsers = async () => {
       phone: '',
       password: '',
       confirmPassword: '',
-      role: 'user',
+      role: currentUser?.role === 'admin' ? 'manager' : 'user',
       gender: '',
-      country: '',
+      country: 'BR',
       state: '',
       city: '',
       neighborhood: '',
@@ -203,11 +247,39 @@ const loadUsers = async () => {
 
     try {
       setActionLoading('edit');
-      await userService.update(selectedUser.id, editForm);
+      
+      // Preparar dados para atualização
+      const updateData: any = {
+        name: editForm.name,
+        email: editForm.email,
+        phone: editForm.phone,
+        role: editForm.role,
+        is_active: editForm.is_active,
+        gender: editForm.gender,
+        country: editForm.country,
+        state: editForm.state,
+        city: editForm.city,
+        neighborhood: editForm.neighborhood
+      };
+
+      // Se há nova senha e ela foi confirmada
+      if (editPassword.newPassword && editPassword.newPassword === editPassword.confirmPassword) {
+        if (editPassword.newPassword.length < 6) {
+          toast.error('A senha deve ter pelo menos 6 caracteres');
+          return;
+        }
+        updateData.password = editPassword.newPassword;
+      } else if (editPassword.newPassword !== editPassword.confirmPassword) {
+        toast.error('As senhas não coincidem');
+        return;
+      }
+
+      await userService.update(selectedUser.id, updateData);
       await loadUsers();
       setShowEditModal(false);
       setSelectedUser(null);
       setEditForm({});
+      setEditPassword({ newPassword: '', confirmPassword: '' });
       toast.success('Usuário atualizado com sucesso');
     } catch (error) {
       console.error('Erro ao atualizar usuário:', error);
@@ -229,8 +301,24 @@ const loadUsers = async () => {
       return;
     }
 
-    if (createForm.password.length < 6) {
-      toast.error('A senha deve ter pelo menos 6 caracteres');
+    // Validação de senha igual ao invite
+    if (createForm.password.length < 8) {
+      toast.error('A senha deve ter pelo menos 8 caracteres');
+      return;
+    }
+
+    if (!/[A-Z]/.test(createForm.password)) {
+      toast.error('A senha deve conter pelo menos uma letra maiúscula');
+      return;
+    }
+
+    if (!/[0-9]/.test(createForm.password)) {
+      toast.error('A senha deve conter pelo menos um número');
+      return;
+    }
+
+    if (!/[!@#$%^&*]/.test(createForm.password)) {
+      toast.error('A senha deve conter pelo menos um símbolo especial (!@#$%^&*)');
       return;
     }
 
@@ -240,11 +328,11 @@ const loadUsers = async () => {
       const userData = {
         name: createForm.name,
         email: createForm.email,
-        phone: createForm.phone,
+        phone: createForm.phone, // Já vem formatado sem símbolos do PhoneInput
         password: createForm.password,
         role: createForm.role,
         gender: createForm.gender || null,
-        country: createForm.country || null,
+        country: createForm.country || 'BR',
         state: createForm.state || null,
         city: createForm.city || null,
         neighborhood: createForm.neighborhood || null,
@@ -260,9 +348,9 @@ const loadUsers = async () => {
         phone: '',
         password: '',
         confirmPassword: '',
-        role: 'user',
+        role: currentUser?.role === 'admin' ? 'manager' : 'user',
         gender: '',
-        country: '',
+        country: 'BR',
         state: '',
         city: '',
         neighborhood: '',
@@ -658,17 +746,18 @@ const loadUsers = async () => {
                   />
                 </div>
 
-                <div>
+                <div className="md:col-span-2">
                   <label className="block text-sm font-medium mb-2">Telefone</label>
-                  <input
-                    type="text"
+                  <PhoneInput
+                    country={'br'}
                     value={createForm.phone}
-                    onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
-                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
-                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
-                        : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
+                    onChange={(phone) => setCreateForm({ ...createForm, phone })}
+                    inputClass={`w-full !p-4 !pl-16 !text-lg !border !rounded-lg transition-colors ${darkMode
+                        ? "!bg-gray-800 !border-gray-700 !text-white focus:!border-blue-500"
+                        : "!bg-white !border-gray-300 !text-gray-900 focus:!border-blue-500"
                       }`}
-                    placeholder="Digite o telefone"
+                    buttonClass={`!border ${darkMode ? "!bg-gray-700 !border-gray-600" : "!bg-white !border-gray-300"}`}
+                    dropdownClass={darkMode ? "!bg-gray-800 !text-white" : ""}
                   />
                 </div>
 
@@ -686,6 +775,28 @@ const loadUsers = async () => {
                     <option value="male">Masculino</option>
                     <option value="female">Feminino</option>
                     <option value="other">Outro</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Cargo</label>
+                  <select
+                    value={createForm.role}
+                    onChange={(e) => setCreateForm({ ...createForm, role: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
+                        : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
+                      }`}
+                  >
+                    {currentUser?.role === 'admin' ? (
+                      <option value="manager">Manager</option>
+                    ) : (
+                      <>
+                        <option value="user">Usuário</option>
+                        <option value="manager">Manager</option>
+                        <option value="admin">Administrador</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
@@ -730,22 +841,6 @@ const loadUsers = async () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2">Cargo</label>
-                  <select
-                    value={createForm.role}
-                    onChange={(e) => setCreateForm({ ...createForm, role: e.target.value })}
-                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
-                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
-                        : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
-                      }`}
-                  >
-                    <option value="user">Usuário</option>
-                    <option value="manager">Manager</option>
-                    <option value="admin">Administrador</option>
-                  </select>
-                </div>
-
-                <div>
                   <label className="block text-sm font-medium mb-2">Status</label>
                   <select
                     value={createForm.is_active}
@@ -771,35 +866,46 @@ const loadUsers = async () => {
                         : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
                       }`}
                     placeholder="Digite o país"
+                    disabled
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium mb-2">Estado</label>
-                  <input
-                    type="text"
+                  <select
                     value={createForm.state}
                     onChange={(e) => setCreateForm({ ...createForm, state: e.target.value })}
                     className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
                         ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
                         : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
                       }`}
-                    placeholder="Digite o estado"
-                  />
+                  >
+                    <option value="">Selecione o estado</option>
+                    {estados.map((estado) => (
+                      <option key={estado.id} value={estado.sigla}>
+                        {estado.nome}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium mb-2">Cidade</label>
-                  <input
-                    type="text"
+                  <select
                     value={createForm.city}
                     onChange={(e) => setCreateForm({ ...createForm, city: e.target.value })}
                     className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
                         ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
                         : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
                       }`}
-                    placeholder="Digite a cidade"
-                  />
+                  >
+                    <option value="">Selecione a cidade</option>
+                    {cidades.map((cidade) => (
+                      <option key={cidade.id} value={cidade.nome}>
+                        {cidade.nome}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
@@ -958,14 +1064,16 @@ const loadUsers = async () => {
 
                 <div>
                   <label className="block text-sm font-medium mb-2">Telefone</label>
-                  <input
-                    type="text"
+                  <PhoneInput
+                    country={'br'}
                     value={editForm.phone || ''}
-                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
-                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
-                        : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
+                    onChange={(phone) => setEditForm({ ...editForm, phone })}
+                    inputClass={`w-full !p-4 !pl-16 !text-lg !border !rounded-lg transition-colors ${darkMode
+                        ? "!bg-gray-800 !border-gray-700 !text-white focus:!border-blue-500"
+                        : "!bg-white !border-gray-300 !text-gray-900 focus:!border-blue-500"
                       }`}
+                    buttonClass={`!border ${darkMode ? "!bg-gray-700 !border-gray-600" : "!bg-white !border-gray-300"}`}
+                    dropdownClass={darkMode ? "!bg-gray-800 !text-white" : ""}
                   />
                 </div>
 
@@ -998,6 +1106,101 @@ const loadUsers = async () => {
                       <option value="1">Ativo</option>
                       <option value="0">Inativo</option>
                     </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Estado</label>
+                    <select
+                      value={editForm.state || ''}
+                      onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
+                      className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
+                          ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
+                          : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
+                        }`}
+                    >
+                      <option value="">Selecione o estado</option>
+                      {estados.map((estado) => (
+                        <option key={estado.id} value={estado.sigla}>
+                          {estado.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Cidade</label>
+                    <select
+                      value={editForm.city || ''}
+                      onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                      className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
+                          ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
+                          : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
+                        }`}
+                    >
+                      <option value="">Selecione a cidade</option>
+                      {cidades.map((cidade) => (
+                        <option key={cidade.id} value={cidade.nome}>
+                          {cidade.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Bairro</label>
+                  <input
+                    type="text"
+                    value={editForm.neighborhood || ''}
+                    onChange={(e) => setEditForm({ ...editForm, neighborhood: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
+                        ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
+                        : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
+                      }`}
+                  />
+                </div>
+
+                {/* Campo para alterar senha */}
+                <div className="border-t pt-4 mt-4">
+                  <h4 className="text-sm font-medium mb-3 text-gray-700 dark:text-gray-300">
+                    Alterar Senha (opcional)
+                  </h4>
+                  <div className="grid grid-cols-1 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Nova Senha</label>
+                      <div className="relative">
+                        <input
+                          type="password"
+                          value={editPassword.newPassword}
+                          onChange={(e) => setEditPassword({ ...editPassword, newPassword: e.target.value })}
+                          className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
+                              ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
+                              : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
+                            }`}
+                          placeholder="Deixe em branco para manter a senha atual"
+                        />
+                        <Key className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${darkMode ? "text-gray-400" : "text-gray-500"
+                          }`} />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Confirmar Nova Senha</label>
+                      <div className="relative">
+                        <input
+                          type="password"
+                          value={editPassword.confirmPassword}
+                          onChange={(e) => setEditPassword({ ...editPassword, confirmPassword: e.target.value })}
+                          className={`w-full px-3 py-2 rounded-lg border transition-colors ${darkMode
+                              ? "bg-gray-800 border-gray-700 text-white focus:border-blue-500"
+                              : "bg-white border-gray-300 text-gray-900 focus:border-blue-500"
+                            }`}
+                          placeholder="Confirme a nova senha"
+                        />
+                        <Key className={`absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${darkMode ? "text-gray-400" : "text-gray-500"
+                          }`} />
+                      </div>
+                    </div>
                   </div>
                 </div>
 
