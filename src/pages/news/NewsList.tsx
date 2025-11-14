@@ -1,6 +1,6 @@
 // src/pages/News/NewsList.tsx
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Search, Filter, Grid, List, Heart, MessageCircle, Eye } from 'lucide-react';
 import { useNews } from '../../pages/hooks/useNews';
 import { useUser } from '../../context/UserContext';
@@ -9,15 +9,83 @@ import Sidebar from '../../components/Sidebar';
 import { useTheme } from '../../context/ThemeContext';
 
 export const NewsList: React.FC = () => {
-  const { news, loading, error, deleteNews } = useNews();
+  const { news, loading, error, deleteNews, likeNews, refreshNews } = useNews();
   const { user } = useUser();
+  const navigate = useNavigate();
   useTheme();
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [likingNews, setLikingNews] = useState<string | null>(null);
 
   // Verificar se o usuário pode criar notícias
   const canCreateNews = user && (user.role === 'super' || user.role === 'admin' || user.role === 'manager');
+
+  // Função para verificar se o usuário curtiu a notícia - VERSÃO CORRIGIDA
+  const isNewsLiked = (newsItem: any) => {
+    if (!user || !newsItem.liked_by) return false;
+    
+    // Verificar se o user.id está no array liked_by
+    // Garantir que ambos sejam strings para comparação
+    const userIdStr = String(user.id);
+    const userLiked = Array.isArray(newsItem.liked_by) 
+      ? newsItem.liked_by.some((id: any) => String(id) === userIdStr)
+      : false;
+    
+    console.log('❤️ Verificando like no NewsList:', {
+      newsId: newsItem.id,
+      userId: user.id,
+      userIdStr,
+      liked_by: newsItem.liked_by,
+      userLiked: userLiked
+    });
+    
+    return userLiked;
+  };
+
+  // Função para lidar com o like - VERSÃO CORRIGIDA
+  const handleLike = async (newsId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!user) {
+      alert('Você precisa estar logado para curtir notícias');
+      return;
+    }
+
+    setLikingNews(newsId);
+    try {
+      console.log('🎯 Iniciando like na lista para notícia:', newsId);
+      const success = await likeNews(newsId);
+      
+      if (success) {
+        console.log('✅ Like atualizado com sucesso no NewsList para:', newsId);
+        // Recarregar os dados para garantir sincronização
+        setTimeout(() => {
+          refreshNews();
+        }, 100);
+      } else {
+        console.error('❌ Erro ao atualizar like no NewsList para:', newsId);
+      }
+    } catch (err: any) {
+      console.error('Erro ao curtir notícia:', err);
+      alert(err.message || 'Erro ao curtir notícia');
+    } finally {
+      setLikingNews(null);
+    }
+  };
+
+  // Função para navegar para a página de detalhes da notícia na seção de comentários
+  const handleCommentClick = (newsId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    navigate(`/news/${newsId}#comments`);
+  };
+
+  // Função para navegar para a página de detalhes da notícia
+  const handleNewsClick = (newsId: string) => {
+    navigate(`/news/${newsId}`);
+  };
 
   // Função para lidar com a exclusão de notícia
   const handleDeleteNews = async (newsId: string) => {
@@ -71,41 +139,70 @@ export const NewsList: React.FC = () => {
   };
 
   // Calcular total de comentários (incluindo replies)
- const getTotalComments = (newsItem: any) => {
-  // Se temos a propriedade commentsCount (abordagem otimizada)
-  if (newsItem.commentsCount !== undefined) {
-    return newsItem.commentsCount;
-  }
-  
-  // Se temos o array de comentários (abordagem completa)
-  if (newsItem.comments && newsItem.comments.length > 0) {
-    return newsItem.comments.reduce((total: number, comment: any) => {
-      return total + 1 + (comment.replies?.length || 0);
-    }, 0);
-  }
-  
-  return 0;
-};
+  const getTotalComments = (newsItem: any) => {
+    // Se temos a propriedade commentsCount (abordagem otimizada)
+    if (newsItem.commentsCount !== undefined) {
+      return newsItem.commentsCount;
+    }
+    
+    // Se temos o array de comentários (abordagem completa)
+    if (newsItem.comments && newsItem.comments.length > 0) {
+      return newsItem.comments.reduce((total: number, comment: any) => {
+        return total + 1 + (comment.replies?.length || 0);
+      }, 0);
+    }
+    
+    return 0;
+  };
+
+  // Funções de permissão locais (substituindo as do useNews)
+  const canEdit = (newsItem: any) => {
+    if (!user) return false;
+    return user.role === 'super' || newsItem.created_by === user.id;
+  };
+
+  const canDelete = (newsItem: any) => {
+    if (!user) return false;
+    return user.role === 'super' || newsItem.created_by === user.id;
+  };
+
+  // Adicione este useEffect para debug
+  useEffect(() => {
+    console.log('📰 NewsList - Estado atual das notícias:', news.map(item => ({
+      id: item.id,
+      title: item.title,
+      likes: item.likes,
+      liked_by: item.liked_by,
+      user_id: user?.id,
+      isLiked: isNewsLiked(item)
+    })));
+  }, [news, user]);
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
+        <Sidebar />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="text-red-500 text-center">
-          <p className="text-lg font-semibold">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-          >
-            Tentar Novamente
-          </button>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
+        <Sidebar />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-red-500 text-center">
+            <p className="text-lg font-semibold">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            >
+              Tentar Novamente
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -118,20 +215,18 @@ export const NewsList: React.FC = () => {
 
       {/* Main Content */}
       <div className="flex-1">
-        <div className="py-15">
+        <div className="py-8">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             {/* Header */}
             <div className="mb-8">
-              <div className="flex flex-col md:flex-row justify-center md:justify-between gap-5 items-center">
-                <div className="flex items-center space-x-4">
-                  <div>
-                    <h1 className="text-3xl text-center md:text-start font-bold text-gray-900 dark:text-white">
-                      Notícias
-                    </h1>
-                    <p className="text-gray-600 dark:text-gray-400 mt-2">
-                      Fique por dentro das últimas novidades
-                    </p>
-                  </div>
+              <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                <div>
+                  <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                    Notícias
+                  </h1>
+                  <p className="text-gray-600 dark:text-gray-400 mt-2">
+                    Fique por dentro das últimas novidades
+                  </p>
                 </div>
 
                 {/* Botão Nova Notícia - apenas para usuários autorizados */}
@@ -210,14 +305,24 @@ export const NewsList: React.FC = () => {
                     key={newsItem.id}
                     news={newsItem}
                     onDelete={handleDeleteNews}
+                    onLike={handleLike}
+                    onComment={handleCommentClick}
                     isDeleting={isDeleting === newsItem.id}
+                    isLiking={likingNews === newsItem.id}
+                    isLiked={isNewsLiked(newsItem)}
+                    canEdit={canEdit(newsItem)}
+                    canDelete={canDelete(newsItem)}
                   />
                 ))}
               </div>
             ) : (
               <div className="space-y-4">
                 {filteredNews.map((newsItem) => (
-                  <div key={newsItem.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+                  <div 
+                    key={newsItem.id} 
+                    className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow cursor-pointer"
+                    onClick={() => handleNewsClick(newsItem.id)}
+                  >
                     <div className="flex flex-col lg:flex-row lg:items-start gap-4">
                       {newsItem.image && (
                         <img
@@ -238,19 +343,32 @@ export const NewsList: React.FC = () => {
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
                             {/* Likes */}
-                            <div className="flex items-center space-x-1">
-                              <Heart className="w-4 h-4" />
+                            <button
+                              onClick={(e) => handleLike(newsItem.id, e)}
+                              disabled={!user || likingNews === newsItem.id}
+                              className={`flex items-center space-x-1 transition-colors ${
+                                isNewsLiked(newsItem) 
+                                  ? 'text-red-500 hover:text-red-600' 
+                                  : 'text-gray-500 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-300'
+                              } ${!user ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                              <Heart 
+                                className={`w-4 h-4 ${isNewsLiked(newsItem) ? 'fill-current' : ''} ${likingNews === newsItem.id ? 'animate-pulse' : ''}`}
+                              />
                               <span>{newsItem.likes || 0}</span>
-                            </div>
+                            </button>
 
                             {/* Comentários */}
-                            <div className="flex items-center space-x-1">
+                            <button
+                              onClick={(e) => handleCommentClick(newsItem.id, e)}
+                              className="flex items-center space-x-1 text-gray-500 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-300 transition-colors"
+                            >
                               <MessageCircle className="w-4 h-4" />
                               <span>{getTotalComments(newsItem)}</span>
-                            </div>
+                            </button>
 
                             {/* Visualizações (simulado) */}
-                            <div className="flex items-center space-x-1">
+                            <div className="flex items-center space-x-1 text-gray-500 dark:text-gray-400">
                               <Eye className="w-4 h-4" />
                               <span>{Math.floor(Math.random() * 1000) + 100}</span>
                             </div>
@@ -271,6 +389,7 @@ export const NewsList: React.FC = () => {
                           <Link
                             to={`/news/${newsItem.id}`}
                             className="text-blue-500 hover:text-blue-600 text-sm font-medium"
+                            onClick={(e) => e.stopPropagation()}
                           >
                             Ler mais →
                           </Link>

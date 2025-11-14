@@ -1,10 +1,10 @@
-// src/pages/News/NewsDetail.tsx
+// src/pages/News/NewsDetail.tsx (atualizado)
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'react-toastify';
-import DOMPurify from 'dompurify'; // ⬅️ Adicione esta importação
+import DOMPurify from 'dompurify';
 import {
     ArrowLeft,
     Calendar,
@@ -15,35 +15,35 @@ import {
     Share2,
     Clock,
     Reply,
-    CornerDownLeft
+    CornerDownLeft,
+    ChevronDown,
+    ChevronUp
 } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
-import { useNews } from '../../pages/hooks/useNews';
 import { useUser } from '../../context/UserContext';
 import { commentSchema, type CommentFormData } from '../../schemas/news';
 import { campaignService, type Campaign } from '../../services/campaignService';
 import Sidebar from '../../components/Sidebar';
+import { useNewsItem } from '../../pages/hooks/useNewsItem';
 
 export const NewsDetail: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const { darkMode, colors } = useTheme();
     const { user } = useUser();
+    
+    // Usar useNewsItem hook específico para esta notícia
     const {
-        getNewsById,
-        deleteNews,
-        likeNews,
-        addComment,
-        addReply,
-        canEdit,
-        canDelete,
+        newsItem: currentNews,
         loading,
         error,
-        clearError,
-        currentNews
-    } = useNews();
+        likeNewsItem,
+        likeCommentItem, // ← Nova função
+        addComment: addCommentToItem,
+        addReply: addReplyToItem,
+        clearError
+    } = useNewsItem(id || '');
 
-    const [isLoading, setIsLoading] = useState(true);
     const [isLiking, setIsLiking] = useState(false);
     const [isAddingComment, setIsAddingComment] = useState(false);
     const [isAddingReply, setIsAddingReply] = useState<string | null>(null);
@@ -51,6 +51,8 @@ export const NewsDetail: React.FC = () => {
     const [campaign, setCampaign] = useState<Campaign | null>(null);
     const [replyingTo, setReplyingTo] = useState<string | null>(null);
     const [replyText, setReplyText] = useState('');
+    const [showReplies, setShowReplies] = useState<{ [key: string]: boolean }>({});
+    const [likingComments, setLikingComments] = useState<{ [key: string]: boolean }>({});
 
     const {
         register,
@@ -64,11 +66,10 @@ export const NewsDetail: React.FC = () => {
 
     const commentText = watch('text');
 
-    // CORREÇÃO: Função para sanitizar e processar o conteúdo HTML
+    // Função para sanitizar e processar o conteúdo HTML
     const getSanitizedContent = (content: string) => {
         if (!content) return '';
-        
-        // Debug do conteúdo original
+
         console.log('🔍 Conteúdo original:', {
             content: content.substring(0, 200) + '...',
             hasHTML: content.includes('<'),
@@ -98,37 +99,8 @@ export const NewsDetail: React.FC = () => {
         return sanitized;
     };
 
-    // Carregar notícia
+    // Carregar informações da campanha
     useEffect(() => {
-        const loadNews = async () => {
-            if (!id) return;
-
-            if (!user) {
-                console.log('⏳ Aguardando usuário carregar...');
-                return;
-            }
-
-            setIsLoading(true);
-            clearError();
-
-            try {
-                console.log('🔄 NewsDetail: Iniciando carregamento da notícia', id, 'usuário:', user.id);
-                await getNewsById(id);
-                console.log('✅ NewsDetail: Notícia carregada', currentNews);
-
-                if (currentNews?.campaign_id) {
-                    console.log('🔄 NewsDetail: Carregando campanha', currentNews.campaign_id);
-                    loadCampaignInfo(String(currentNews.campaign_id));
-                }
-            } catch (err: any) {
-                console.error('❌ NewsDetail: Erro ao carregar notícia:', err);
-                toast.error(err.message || 'Erro ao carregar notícia');
-                navigate('/news');
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
         const loadCampaignInfo = async (campaignId: string) => {
             try {
                 const campaignData = await campaignService.getById(campaignId);
@@ -138,8 +110,11 @@ export const NewsDetail: React.FC = () => {
             }
         };
 
-        loadNews();
-    }, [id, user, navigate]);
+        if (currentNews?.campaign_id) {
+            console.log('🔄 NewsDetail: Carregando campanha', currentNews.campaign_id);
+            loadCampaignInfo(String(currentNews.campaign_id));
+        }
+    }, [currentNews?.campaign_id]);
 
     // Limpar erro quando o componente desmontar
     useEffect(() => {
@@ -148,21 +123,35 @@ export const NewsDetail: React.FC = () => {
         };
     }, [clearError]);
 
-    // Função de like real
+    // Função para toggle das replies
+    const toggleReplies = (commentId: string) => {
+        setShowReplies(prev => ({
+            ...prev,
+            [commentId]: !prev[commentId]
+        }));
+    };
+
+    // Função de like usando useNewsItem
     const handleLike = async () => {
         if (!user) {
             toast.error('Faça login para curtir notícias');
             return;
         }
 
-        if (!currentNews) return;
+        if (!currentNews) {
+            console.error('❌ Notícia não carregada');
+            return;
+        }
 
         setIsLiking(true);
+
         try {
-            const success = await likeNews(currentNews.id);
-            
+            const success = await likeNewsItem();
+
             if (success) {
-                console.log('Like atualizado com sucesso');
+                console.log('✅ Like atualizado com sucesso para notícia:', currentNews.id);
+            } else {
+                toast.error('Erro ao curtir notícia');
             }
         } catch (err) {
             console.error('Erro ao curtir notícia:', err);
@@ -172,7 +161,34 @@ export const NewsDetail: React.FC = () => {
         }
     };
 
-    // Função de adicionar comentário real
+    // Função de like em comentários
+    const handleCommentLike = async (commentId: string) => {
+        if (!user) {
+            toast.error('Faça login para curtir comentários');
+            return;
+        }
+
+        if (!currentNews) return;
+
+        setLikingComments(prev => ({ ...prev, [commentId]: true }));
+
+        try {
+            const success = await likeCommentItem(commentId);
+
+            if (success) {
+                console.log('✅ Like atualizado com sucesso para comentário:', commentId);
+            } else {
+                toast.error('Erro ao curtir comentário');
+            }
+        } catch (err) {
+            console.error('Erro ao curtir comentário:', err);
+            toast.error('Erro ao curtir comentário');
+        } finally {
+            setLikingComments(prev => ({ ...prev, [commentId]: false }));
+        }
+    };
+
+    // Função de adicionar comentário usando useNewsItem
     const handleAddComment = async (data: CommentFormData) => {
         if (!user) {
             toast.error('Faça login para comentar');
@@ -183,8 +199,8 @@ export const NewsDetail: React.FC = () => {
 
         setIsAddingComment(true);
         try {
-            const success = await addComment(currentNews.id, data);
-            
+            const success = await addCommentToItem(data.text);
+
             if (success) {
                 reset();
                 toast.success('Comentário adicionado!');
@@ -199,7 +215,7 @@ export const NewsDetail: React.FC = () => {
         }
     };
 
-    // Função para adicionar reply
+    // Função para adicionar reply usando useNewsItem
     const handleAddReply = async (parentCommentId: string) => {
         if (!user || !replyText.trim()) {
             toast.error('Escreva uma resposta');
@@ -210,12 +226,18 @@ export const NewsDetail: React.FC = () => {
 
         setIsAddingReply(parentCommentId);
         try {
-            const success = await addReply(currentNews.id, parentCommentId, { text: replyText });
+            const success = await addReplyToItem(parentCommentId, replyText);
 
             if (success) {
                 setReplyingTo(null);
                 setReplyText('');
                 toast.success('Resposta adicionada!');
+
+                // Mostrar as replies após adicionar uma nova
+                setShowReplies(prev => ({
+                    ...prev,
+                    [parentCommentId]: true
+                }));
             } else {
                 toast.error('Erro ao adicionar resposta');
             }
@@ -231,13 +253,12 @@ export const NewsDetail: React.FC = () => {
         if (!currentNews) return;
 
         try {
-            const success = await deleteNews(currentNews.id);
-            if (success) {
-                toast.success('Notícia excluída com sucesso!');
-                navigate('/news');
-            } else {
-                throw new Error('Falha ao excluir notícia');
-            }
+            // Usar o serviço diretamente para deletar
+            const { newsService } = await import('../../services/newsService');
+            await newsService.deleteNews(currentNews.id);
+            
+            toast.success('Notícia excluída com sucesso!');
+            navigate('/news');
         } catch (err: any) {
             console.error('Erro ao excluir notícia:', err);
             toast.error(err.message || 'Erro ao excluir notícia');
@@ -291,11 +312,14 @@ export const NewsDetail: React.FC = () => {
         return formatDate(dateString);
     };
 
-    const userCanEdit = currentNews && canEdit(currentNews);
-    const userCanDelete = currentNews && canDelete(currentNews);
+    // Funções de permissão locais
+    const userCanEdit = currentNews && user && (user.role === 'super' || user.role ==='admin' || currentNews.created_by === user.id);
+    const userCanDelete = currentNews && user && (user.role === 'super' || user.role ==='admin' || currentNews.created_by === user.id);
+
+    // Verificar se o usuário curtiu a notícia
     const isLiked = user && currentNews?.liked_by?.includes(user.id);
 
-    if (isLoading) {
+    if (loading) {
         return (
             <div className={`flex h-screen overflow-hidden transition-colors duration-300
                 ${darkMode ? "bg-gray-950 text-gray-100" : "bg-gray-50 text-gray-900"}
@@ -342,7 +366,7 @@ export const NewsDetail: React.FC = () => {
         `}>
             {/* Sidebar - FIXO igual ao Dashboard */}
             <Sidebar />
-            
+
             {/* Main Content */}
             <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Conteúdo principal com scroll */}
@@ -467,12 +491,12 @@ export const NewsDetail: React.FC = () => {
                                         </div>
                                     </div>
 
-                                    {/* CORREÇÃO: Conteúdo com sanitização */}
+                                    {/* Conteúdo com sanitização */}
                                     <div className="news-content-container mb-6">
                                         {currentNews.content ? (
-                                            <div 
+                                            <div
                                                 className="news-content prose prose-lg max-w-none dark:prose-invert text-gray-700 dark:text-gray-300"
-                                                dangerouslySetInnerHTML={{ 
+                                                dangerouslySetInnerHTML={{
                                                     __html: getSanitizedContent(currentNews.content)
                                                 }}
                                             />
@@ -485,6 +509,7 @@ export const NewsDetail: React.FC = () => {
 
                                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pt-6 border-t border-gray-200 dark:border-gray-700 gap-4">
                                         <div className="flex items-center space-x-6">
+                                            {/* Like Button */}
                                             <button
                                                 onClick={handleLike}
                                                 disabled={isLiking || !user}
@@ -493,7 +518,7 @@ export const NewsDetail: React.FC = () => {
                                                     : 'text-gray-500 dark:text-gray-400 hover:text-red-500'
                                                     } disabled:opacity-50 disabled:cursor-not-allowed`}
                                             >
-                                                <Heart className={`w-5 h-5 ${isLiked ? 'fill-current' : ''}`} />
+                                                <Heart className={`w-5 h-5 ${isLiked ? 'fill-current' : ''} ${isLiking ? 'animate-pulse' : ''}`} />
                                                 <span className="font-medium">{currentNews.likes || 0}</span>
                                                 <span className="text-sm">Curtidas</span>
                                             </button>
@@ -517,7 +542,7 @@ export const NewsDetail: React.FC = () => {
                             </div>
 
                             {/* Seção de Comentários */}
-                            <div className={`rounded-2xl shadow-lg ${darkMode ? 'bg-gray-800' : 'bg-white'} p-6 lg:p-8`}>
+                            <div className={`rounded-2xl shadow-lg ${darkMode ? 'bg-gray-800' : 'bg-white'} p-6 lg:p-8`} id="comments">
                                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
                                     Comentários ({currentNews.comments?.reduce((total: number, comment: any) =>
                                         total + 1 + (comment.replies?.length || 0), 0
@@ -629,6 +654,19 @@ export const NewsDetail: React.FC = () => {
                                                             </p>
 
                                                             <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
+                                                                {/* Like Button para Comentário */}
+                                                                <button
+                                                                    onClick={() => handleCommentLike(comment.id)}
+                                                                    disabled={!user || likingComments[comment.id]}
+                                                                    className="flex items-center space-x-1 hover:text-red-500 transition-colors disabled:opacity-50"
+                                                                    title="Curtir comentário"
+                                                                >
+                                                                    <Heart 
+                                                                        className={`w-4 h-4 ${likingComments[comment.id] ? 'animate-pulse' : ''}`}
+                                                                    />
+                                                                    <span>{comment.likes || 0}</span>
+                                                                </button>
+
                                                                 <button
                                                                     onClick={() => setReplyingTo(replyingTo === comment.id ? null : comment.id)}
                                                                     className="flex items-center space-x-1 hover:text-blue-500 transition-colors"
@@ -636,6 +674,26 @@ export const NewsDetail: React.FC = () => {
                                                                     <Reply className="w-4 h-4" />
                                                                     <span>Responder</span>
                                                                 </button>
+
+                                                                {/* Botão para mostrar/ocultar replies */}
+                                                                {comment.replies && comment.replies.length > 0 && (
+                                                                    <button
+                                                                        onClick={() => toggleReplies(comment.id)}
+                                                                        className="flex items-center space-x-1 hover:text-blue-500 transition-colors"
+                                                                    >
+                                                                        {showReplies[comment.id] ? (
+                                                                            <>
+                                                                                <ChevronUp className="w-4 h-4" />
+                                                                                <span>Ocultar respostas ({comment.replies.length})</span>
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <ChevronDown className="w-4 h-4" />
+                                                                                <span>Ver respostas ({comment.replies.length})</span>
+                                                                            </>
+                                                                        )}
+                                                                    </button>
+                                                                )}
                                                             </div>
                                                         </div>
 
@@ -699,8 +757,8 @@ export const NewsDetail: React.FC = () => {
                                                     </div>
                                                 </div>
 
-                                                {/* Replies */}
-                                                {comment.replies && comment.replies.length > 0 && (
+                                                {/* Replies - Mostrar apenas se expandido */}
+                                                {comment.replies && comment.replies.length > 0 && showReplies[comment.id] && (
                                                     <div className="space-y-3 ml-8 pl-6 border-l-2 border-gray-200 dark:border-gray-600">
                                                         {comment.replies.map((reply: any) => (
                                                             <div key={reply.id} className="flex space-x-3">
@@ -733,6 +791,22 @@ export const NewsDetail: React.FC = () => {
                                                                         <p className="text-gray-700 dark:text-gray-300 text-sm break-words">
                                                                             {reply.text}
                                                                         </p>
+
+                                                                        {/* Like Button para Reply */}
+                                                                        <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                                                            <button
+                                                                                onClick={() => handleCommentLike(reply.id)}
+                                                                                disabled={!user || likingComments[reply.id]}
+                                                                                className="flex items-center space-x-1 hover:text-red-500 transition-colors disabled:opacity-50"
+                                                                                title="Curtir resposta"
+                                                                            >
+                                                                                <Heart 
+                                                                                    className={`w-3 h-3 ${likingComments[reply.id] ? 'animate-pulse' : ''}`}
+                                                                                />
+                                                                                <span>{reply.likes || 0}</span>
+                                                                            </button>
+                                                                        </div>
+
                                                                         {reply.is_loading && (
                                                                             <div className="flex items-center space-x-1 mt-1">
                                                                                 <div className="animate-spin rounded-full h-2 w-2 border-b-2 border-blue-500"></div>

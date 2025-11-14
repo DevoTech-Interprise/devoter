@@ -82,75 +82,100 @@ export const useNews = () => {
   };
 
   const likeNews = async (newsId: string): Promise<boolean> => {
-    if (!user) {
-      setError('Usuário não autenticado');
-      return false;
-    }
+  if (!user) {
+    setError('Usuário não autenticado');
+    return false;
+  }
 
-    try {
-      const result = await likeService.likeNotice(newsId, user.id);
+  try {
+    const result = await likeService.likeNotice(newsId, user.id);
 
-      if (result.liked !== undefined) {
-        // Atualizar a notícia na lista
-        setNews(prevNews =>
-          prevNews.map(newsItem => {
-            if (newsItem.id === newsId) {
-              const currentLikes = newsItem.likes || 0;
-              const currentLikedBy = newsItem.liked_by || [];
+    console.log('🔄 Resultado do like:', {
+      newsId,
+      userId: user.id,
+      result,
+      liked: result.liked
+    });
 
-              if (result.liked) {
-                // Adicionar like
-                return {
-                  ...newsItem,
-                  likes: currentLikes + 1,
-                  liked_by: [...currentLikedBy, user.id]
-                };
-              } else {
-                // Remover like
-                return {
-                  ...newsItem,
-                  likes: Math.max(0, currentLikes - 1),
-                  liked_by: currentLikedBy.filter(id => id !== user.id)
-                };
-              }
-            }
-            return newsItem;
-          })
-        );
+    if (result.liked !== undefined) {
+      // Atualizar a notícia na lista PRIMEIRO
+      setNews(prevNews =>
+        prevNews.map(newsItem => {
+          if (newsItem.id === newsId) {
+            const currentLikes = newsItem.likes || 0;
+            const currentLikedBy = newsItem.liked_by || [];
 
-        // Atualizar também currentNews se for a notícia atual
-        if (currentNews && currentNews.id === newsId) {
-          setCurrentNews(prev => {
-            if (!prev) return prev;
-            const currentLikes = prev.likes || 0;
-            const currentLikedBy = prev.liked_by || [];
+            let updatedLikedBy;
+            let updatedLikes;
 
             if (result.liked) {
-              return {
-                ...prev,
-                likes: currentLikes + 1,
-                liked_by: [...currentLikedBy, user.id]
-              };
+              // Adicionar like
+              updatedLikedBy = [...currentLikedBy, user.id];
+              updatedLikes = currentLikes + 1;
             } else {
-              return {
-                ...prev,
-                likes: Math.max(0, currentLikes - 1),
-                liked_by: currentLikedBy.filter(id => id !== user.id)
-              };
+              // Remover like
+              updatedLikedBy = currentLikedBy.filter(id => id !== user.id);
+              updatedLikes = Math.max(0, currentLikes - 1);
             }
-          });
+
+            console.log('📝 Atualizando notícia na lista:', {
+              newsId,
+              oldLikes: currentLikes,
+              newLikes: updatedLikes,
+              oldLikedBy: currentLikedBy,
+              newLikedBy: updatedLikedBy
+            });
+
+            return {
+              ...newsItem,
+              likes: updatedLikes,
+              liked_by: updatedLikedBy
+            };
+          }
+          return newsItem;
+        })
+      );
+
+      // ⬅️ CORREÇÃO CRÍTICA: Atualizar o currentNews APENAS se for a notícia atual
+      // Isso evita que o like de uma notícia afete outra
+      if (currentNews && currentNews.id === newsId) {
+        const currentLikes = currentNews.likes || 0;
+        const currentLikedBy = currentNews.liked_by || [];
+
+        let updatedLikedBy;
+        let updatedLikes;
+
+        if (result.liked) {
+          updatedLikedBy = [...currentLikedBy, user.id];
+          updatedLikes = currentLikes + 1;
+        } else {
+          updatedLikedBy = currentLikedBy.filter(id => id !== user.id);
+          updatedLikes = Math.max(0, currentLikes - 1);
         }
 
-        return true;
-      }
-      return false;
-    } catch (err: any) {
-      console.error('Error liking news:', err);
-      setError(err.message || 'Erro ao curtir notícia');
-      return false;
-    }
-  };
+        console.log('📝 Atualizando currentNews específico:', {
+          newsId,
+          currentNewsId: currentNews.id,
+          oldLikes: currentLikes,
+          newLikes: updatedLikes
+        });
 
+        setCurrentNews(prev => ({
+          ...prev!,
+          likes: updatedLikes,
+          liked_by: updatedLikedBy
+        }));
+      }
+
+      return true;
+    }
+    return false;
+  } catch (err: any) {
+    console.error('Error liking news:', err);
+    setError(err.message || 'Erro ao curtir notícia');
+    return false;
+  }
+};
   // CORREÇÃO: Função getNewsById melhorada com fallback
   const getNewsById = async (id: string): Promise<News | null> => {
     try {
@@ -295,14 +320,21 @@ export const useNews = () => {
         filteredNews.map(async (newsItem): Promise<ExtendedNews> => {
           let likesCount = 0;
           let commentsCount = 0;
+          let likedBy: string[] = []; // ⬅️ ADICIONE ESTA LINHA
 
           try {
-            // Carregar contador de likes
+            // Carregar contador de likes E a lista de quem curtiu
             if (user) {
               try {
                 const likesData = await getNewsLikes(newsItem.id);
                 likesCount = likesData?.notice_likes_count || 0;
-                console.log(`❤️ Notícia ${newsItem.id}: ${likesCount} likes`);
+
+                // ⬅️ ADICIONE ESTAS LINHAS: Carregar a lista de usuários que curtiram
+                if (likesData?.likes) {
+                  likedBy = likesData.likes.map((like: any) => like.user_id);
+                }
+
+                console.log(`❤️ Notícia ${newsItem.id}: ${likesCount} likes, liked_by:`, likedBy);
               } catch (err) {
                 console.warn(`⚠️ Erro ao carregar likes da notícia ${newsItem.id}:`, err);
               }
@@ -329,8 +361,9 @@ export const useNews = () => {
           return {
             ...newsItem,
             likes: likesCount,
+            liked_by: likedBy, // ⬅️ GARANTIR QUE liked_by ESTÁ SENDO SETADO
             comments: [], // Não carregamos os comentários completos
-            commentsCount: commentsCount // ⬅️ Agora esta propriedade é válida
+            commentsCount: commentsCount
           };
         })
       );
@@ -339,6 +372,7 @@ export const useNews = () => {
         id: item.id,
         title: item.title,
         likes: item.likes,
+        liked_by: item.liked_by, // ⬅️ VERIFICAR SE liked_by ESTÁ PRESENTE
         commentsCount: item.commentsCount
       })));
 

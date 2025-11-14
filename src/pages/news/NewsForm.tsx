@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import DOMPurify from 'dompurify';
 import { 
   ArrowLeft, 
   Save, 
@@ -188,6 +189,39 @@ export const NewsForm: React.FC = () => {
     setEditorContent(content);
   };
 
+  // Função para sanitizar e processar o conteúdo HTML (igual ao NewsDetail)
+  const getSanitizedContent = (content: string) => {
+    if (!content) return '';
+
+    console.log('🔍 Conteúdo original no preview:', {
+      content: content.substring(0, 200) + '...',
+      hasHTML: content.includes('<'),
+      hasPTags: content.includes('<p'),
+      hasImgTags: content.includes('<img')
+    });
+
+    // Sanitiza o conteúdo HTML
+    const sanitized = DOMPurify.sanitize(content, {
+      ALLOWED_TAGS: [
+        'p', 'br', 'strong', 'em', 'u', 's', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'ul', 'ol', 'li', 'blockquote', 'code', 'pre', 'span', 'div',
+        'img', 'a', 'table', 'thead', 'tbody', 'tr', 'th', 'td'
+      ],
+      ALLOWED_ATTR: [
+        'class', 'style', 'src', 'alt', 'href', 'target', 'rel', 'width', 'height',
+        'data-start', 'data-end', 'data-testid'
+      ],
+      ALLOW_DATA_ATTR: true
+    });
+
+    console.log('✅ Conteúdo sanitizado no preview:', {
+      sanitized: sanitized.substring(0, 200) + '...',
+      length: sanitized.length
+    });
+
+    return sanitized;
+  };
+
   const onSubmit = async (data: NewsFormData) => {
     if (!user) {
       toast.error('Usuário não autenticado');
@@ -281,49 +315,96 @@ export const NewsForm: React.FC = () => {
   const selectedCampaign = watchedCampaignId ? 
     campaigns.find(camp => String(camp.id) === String(watchedCampaignId)) : null;
 
-  // Preview da notícia
+  // Preview da notícia - CORRIGIDO para usar a mesma formatação do NewsDetail
   const renderPreview = () => (
-    <div className={`rounded-lg border p-4 sm:p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-      <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-gray-900 dark:text-white">
-        {watchedTitle || 'Título da Notícia'}
-      </h2>
-      
+    <div className={`rounded-2xl overflow-hidden shadow-lg ${darkMode ? 'bg-gray-800' : 'bg-white'} mb-6`}>
       {imagePreview && (
-        <div className="mb-3 sm:mb-4">
-          <img 
-            src={imagePreview} 
-            alt="Preview" 
-            className="w-full h-40 sm:h-64 object-cover rounded-lg"
+        <div className="relative">
+          <img
+            src={imagePreview}
+            alt={watchedTitle || 'Preview da Notícia'}
+            className="w-full h-64 lg:h-80 object-cover"
           />
+
+          {selectedCampaign && (
+            <div className="absolute top-4 left-4">
+              <div className="flex items-center space-x-2 bg-black bg-opacity-70 rounded-full px-3 py-2 backdrop-blur-sm border border-white border-opacity-20">
+                {selectedCampaign.logo && (
+                  <img
+                    src={selectedCampaign.logo}
+                    alt={selectedCampaign.name}
+                    className="w-5 h-5 rounded-full object-cover"
+                  />
+                )}
+                <span className="text-white text-sm font-medium">
+                  {selectedCampaign.name}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      <p className="text-gray-600 dark:text-gray-300 text-base sm:text-lg mb-3 sm:mb-4">
-        {watchedPreview || 'Preview da notícia...'}
-      </p>
+      <div className="p-6 lg:p-8">
+        <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-4 leading-tight">
+          {watchedTitle || 'Título da Notícia'}
+        </h1>
 
-      <div 
-        className="text-gray-700 dark:text-gray-300 prose prose-sm sm:prose-base lg:prose-lg max-w-none dark:prose-invert"
-        dangerouslySetInnerHTML={{ __html: editorContent || '<p>Conteúdo da notícia...</p>' }}
-      />
+        {watchedPreview && (
+          <p className="text-xl text-gray-600 dark:text-gray-300 mb-6 leading-relaxed">
+            {watchedPreview}
+          </p>
+        )}
 
-      <div className="mt-4 sm:mt-6 pt-3 sm:pt-4 border-t border-gray-200 dark:border-gray-700">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs sm:text-sm text-gray-500 dark:text-gray-400 gap-2">
-          <div className="flex items-center space-x-3 sm:space-x-4">
-            <div className="flex items-center">
-              <User className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
-              <span>{user?.name || 'Autor'}</span>
+        <div className="flex flex-wrap items-center gap-4 mb-6 text-sm text-gray-500 dark:text-gray-400">
+          <div className="flex items-center">
+            <Calendar className="w-4 h-4 mr-2" />
+            <span>{new Date().toLocaleDateString('pt-BR', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}</span>
+          </div>
+
+          <div className="flex items-center">
+            <User className="w-4 h-4 mr-2" />
+            <span>{user?.name || 'Autor'}</span>
+          </div>
+        </div>
+
+        {/* Conteúdo com sanitização - IGUAL AO NEWSDETAIL */}
+        <div className="news-content-container mb-6">
+          {editorContent ? (
+            <div
+              className="news-content prose prose-lg max-w-none dark:prose-invert text-gray-700 dark:text-gray-300"
+              dangerouslySetInnerHTML={{
+                __html: getSanitizedContent(editorContent)
+              }}
+            />
+          ) : (
+            <p className="text-gray-500 dark:text-gray-400 italic">
+              Conteúdo não disponível.
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pt-6 border-t border-gray-200 dark:border-gray-700 gap-4">
+          <div className="flex items-center space-x-6">
+            <div className="flex items-center space-x-2 text-gray-500 dark:text-gray-400">
+              <span className="font-medium">0</span>
+              <span className="text-sm">Curtidas</span>
             </div>
-            <div className="flex items-center">
-              <Calendar className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
-              <span>{new Date().toLocaleDateString('pt-BR')}</span>
+
+            <div className="flex items-center space-x-2 text-gray-500 dark:text-gray-400">
+              <span className="font-medium">0</span>
+              <span className="text-sm">Comentários</span>
             </div>
-            {selectedCampaign && (
-              <div className="flex items-center">
-                <Building className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
-                <span>{selectedCampaign.name}</span>
-              </div>
-            )}
+          </div>
+
+          <div className="text-sm text-gray-500 dark:text-gray-400 text-center sm:text-right">
+            Preview • {new Date().toLocaleDateString('pt-BR')}
           </div>
         </div>
       </div>
@@ -728,9 +809,11 @@ export const NewsForm: React.FC = () => {
                 </div>
               </div>
             ) : (
-              /* Preview em tela cheia */
+              /* Preview em tela cheia - CORRIGIDO */
               <div className="w-full">
-                {renderPreview()}
+                <div className="max-w-4xl mx-auto">
+                  {renderPreview()}
+                </div>
               </div>
             )}
           </div>

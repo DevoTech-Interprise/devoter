@@ -1,27 +1,38 @@
 // src/components/NewsCard.tsx
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Heart, MessageCircle, Eye, Calendar, MoreVertical, Trash2, Edit3 } from 'lucide-react';
 import type { News } from '../services/newsService';
-import { useNews } from '../pages/hooks/useNews';
 import { useUser } from '../context/UserContext';
 import { campaignService, type Campaign } from '../services/campaignService';
 
 interface NewsCardProps {
-  news: News & { commentsCount?: number }; // ⬅️ Adicione esta tipagem
+  news: News & { commentsCount?: number };
   onDelete?: (newsId: string) => void;
+  onLike?: (newsId: string, e: React.MouseEvent) => void;
+  onComment?: (newsId: string, e: React.MouseEvent) => void;
   isDeleting?: boolean;
+  isLiking?: boolean;
+  isLiked?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
 }
 
 export const NewsCard: React.FC<NewsCardProps> = ({ 
   news, 
   onDelete,
-  isDeleting = false 
+  onLike,
+  onComment,
+  isDeleting = false,
+  isLiking = false,
+  isLiked = false,
+  canEdit = false,
+  canDelete = false
 }) => {
   const [showMenu, setShowMenu] = useState(false);
   const [campaign, setCampaign] = useState<Campaign | null>(null);
-  const { likeNews, canEdit, canDelete } = useNews();
   const { user } = useUser();
+  const navigate = useNavigate();
 
   // Carregar informações da campanha
   useEffect(() => {
@@ -29,7 +40,7 @@ export const NewsCard: React.FC<NewsCardProps> = ({
       if (!news.campaign_id) return;
       
       try {
-        const campaignData = await campaignService.getById(news.campaign_id);
+        const campaignData = await campaignService.getById(String(news.campaign_id));
         setCampaign(campaignData);
       } catch (error) {
         console.error('Erro ao carregar campanha:', error);
@@ -39,14 +50,58 @@ export const NewsCard: React.FC<NewsCardProps> = ({
     loadCampaign();
   }, [news.campaign_id]);
 
-  const handleLike = async () => {
-    await likeNews(news.id);
+  // Calcular isLiked baseado nos dados da notícia (fallback se a prop não for passada)
+  const calculateIsLiked = () => {
+    // Se a prop isLiked foi passada, use ela
+    if (isLiked !== undefined) return isLiked;
+    
+    // Caso contrário, calcule baseado nos dados da notícia
+    if (!user || !news.liked_by) return false;
+    
+    const userIdStr = String(user.id);
+    return Array.isArray(news.liked_by) 
+      ? news.liked_by.some((id: any) => String(id) === userIdStr)
+      : false;
   };
 
-  const handleDelete = () => {
+  const currentIsLiked = calculateIsLiked();
+
+  const handleLike = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('🎯 NewsCard: Clicou no like para notícia:', news.id, 'usuário:', user?.id);
+    if (onLike && user) {
+      onLike(news.id, e);
+    } else if (!user) {
+      console.log('❌ NewsCard: Usuário não logado, não pode curtir');
+    }
+  };
+
+  const handleCommentClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (onComment) {
+      onComment(news.id, e);
+    } else {
+      navigate(`/news/${news.id}#comments`);
+    }
+  };
+
+  const handleNewsClick = () => {
+    navigate(`/news/${news.id}`);
+  };
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (onDelete) {
       onDelete(news.id);
     }
+    setShowMenu(false);
+  };
+
+  const handleEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigate(`/news/edit/${news.id}`);
     setShowMenu(false);
   };
 
@@ -58,14 +113,11 @@ export const NewsCard: React.FC<NewsCardProps> = ({
     });
   };
 
-  // Calcular total de comentários (incluindo replies)
   const getTotalComments = () => {
-    // Se temos a propriedade commentsCount (abordagem otimizada)
     if (news.commentsCount !== undefined) {
       return news.commentsCount;
     }
     
-    // Se temos o array de comentários (abordagem completa)
     if (news.comments && news.comments.length > 0) {
       return news.comments.reduce((total: number, comment: any) => {
         return total + 1 + (comment.replies?.length || 0);
@@ -75,21 +127,25 @@ export const NewsCard: React.FC<NewsCardProps> = ({
     return 0;
   };
 
-  // Verificar se o usuário atual curtiu a notícia
-  const isLiked = user && news.liked_by?.includes(user.id);
-
-  // Debug para verificar os dados
-  console.log('🔍 NewsCard dados:', {
-    id: news.id,
-    title: news.title,
-    likes: news.likes,
-    commentsCount: news.commentsCount,
-    commentsArrayLength: news.comments?.length || 0,
-    getTotalComments: getTotalComments()
-  });
+  // Debug para verificar os dados do like
+  useEffect(() => {
+    console.log('🔍 NewsCard like info:', {
+      id: news.id,
+      title: news.title,
+      likes: news.likes,
+      liked_by: news.liked_by,
+      user_id: user?.id,
+      isLiked_prop: isLiked,
+      currentIsLiked: currentIsLiked,
+      user_has_like: user && news.liked_by?.includes(user.id)
+    });
+  }, [news, user, isLiked, currentIsLiked]);
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow relative">
+    <div 
+      className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow relative cursor-pointer"
+      onClick={handleNewsClick}
+    >
       {/* Loading Overlay */}
       {isDeleting && (
         <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-20">
@@ -125,12 +181,15 @@ export const NewsCard: React.FC<NewsCardProps> = ({
           </div>
         )}
         
-        {/* Menu Overlay - apenas para usuários com permissão */}
-        {(canEdit(news) || canDelete(news)) && (
+        {/* Menu Overlay */}
+        {(canEdit || canDelete) && (
           <div className="absolute top-2 right-2">
             <div className="relative">
               <button
-                onClick={() => setShowMenu(!showMenu)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowMenu(!showMenu);
+                }}
                 disabled={isDeleting}
                 className="p-1 bg-black bg-opacity-50 rounded text-white hover:bg-opacity-70 disabled:opacity-50"
               >
@@ -139,17 +198,16 @@ export const NewsCard: React.FC<NewsCardProps> = ({
               
               {showMenu && (
                 <div className="absolute right-0 mt-1 w-32 bg-white dark:bg-gray-700 rounded-md shadow-lg py-1 z-10">
-                  {canEdit(news) && (
-                    <Link
-                      to={`/news/edit/${news.id}`}
-                      className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
-                      onClick={() => setShowMenu(false)}
+                  {canEdit && (
+                    <button
+                      onClick={handleEdit}
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
                     >
                       <Edit3 className="w-4 h-4 mr-2" />
                       Editar
-                    </Link>
+                    </button>
                   )}
-                  {canDelete(news) && (
+                  {canDelete && (
                     <button
                       onClick={handleDelete}
                       disabled={isDeleting}
@@ -172,62 +230,63 @@ export const NewsCard: React.FC<NewsCardProps> = ({
           {news.title}
         </h3>
         
-        {/* Preview da notícia */}
         <p className="text-gray-600 dark:text-gray-300 text-sm mb-4 line-clamp-3">
           {news.preview}
         </p>
 
-        {/* Meta Information */}
         <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-3">
           <div className="flex items-center space-x-4">
             <div className="flex items-center">
               <Calendar className="w-3 h-3 mr-1" />
               <span>{formatDate(news.created_at)}</span>
             </div>
-            
-            {/* Badge da campanha - versão mobile/compacta */}
-            {/* {campaign && (
-              <div className="flex items-center">
-                <div className="flex items-center space-x-1 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-1 rounded-full">
-                  <Building className="w-3 h-3" />
-                  <span className="text-xs">{campaign.name}</span>
-                </div>
-              </div>
-            )} */}
           </div>
         </div>
 
         {/* Actions */}
         <div className="flex items-center justify-between pt-3 border-t border-gray-200 dark:border-gray-600">
           <div className="flex items-center space-x-4">
+            {/* Like Button */}
             <button
               onClick={handleLike}
-              disabled={!user || isDeleting}
+              disabled={!user || isLiking || isDeleting}
               className={`flex items-center space-x-1 transition-colors ${
-                isLiked 
-                  ? 'text-red-500' 
-                  : 'text-gray-500 dark:text-gray-400 hover:text-red-500'
+                currentIsLiked 
+                  ? 'text-red-500 hover:text-red-600' 
+                  : 'text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400'
               } ${!user ? 'opacity-50 cursor-not-allowed' : ''}`}
-              title={!user ? 'Faça login para curtir' : isLiked ? 'Descurtir' : 'Curtir'}
+              title={!user ? 'Faça login para curtir' : currentIsLiked ? 'Descurtir' : 'Curtir'}
             >
-              <Heart className={`w-4 h-4 ${isLiked ? 'fill-current' : ''}`} />
+              <Heart 
+                className={`w-4 h-4 ${currentIsLiked ? 'fill-current' : ''} ${isLiking ? 'animate-pulse' : ''}`} 
+              />
               <span>{news.likes || 0}</span>
             </button>
             
-            {/* CORREÇÃO: Usar getTotalComments() em vez de news.comments.length */}
-            <div className="flex items-center space-x-1 text-gray-500 dark:text-gray-400">
+            {/* Comment Button */}
+            <button
+              onClick={handleCommentClick}
+              disabled={isDeleting}
+              className="flex items-center space-x-1 text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
+              title="Ver comentários"
+            >
               <MessageCircle className="w-4 h-4" />
               <span>{getTotalComments()}</span>
-            </div>
+            </button>
           </div>
 
-          <Link
-            to={`/news/${news.id}`}
+          <div 
             className="flex items-center text-blue-500 hover:text-blue-600 text-sm font-medium"
+            onClick={(e) => e.stopPropagation()}
           >
-            <Eye className="w-4 h-4 mr-1" />
-            Ler Mais
-          </Link>
+            <Link
+              to={`/news/${news.id}`}
+              className="flex items-center"
+            >
+              <Eye className="w-4 h-4 mr-1" />
+              Ler Mais
+            </Link>
+          </div>
         </div>
       </div>
     </div>
