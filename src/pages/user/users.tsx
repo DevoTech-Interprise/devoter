@@ -19,6 +19,7 @@ import {
 import Sidebar from "../../components/Sidebar";
 import Header from "../../components/Header";
 import { useTheme } from "../../context/ThemeContext";
+import { useCampaignColor } from "../../components/CampaignThemed";
 import { userService, type User } from '../../services/userService';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -28,6 +29,7 @@ import 'react-phone-input-2/lib/style.css';
 
 const UserManagement = () => {
   const { darkMode } = useTheme();
+  const { primaryColor } = useCampaignColor();
   const { user: currentUser } = useUser();
   const [users, setUsers] = useState<User[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]);

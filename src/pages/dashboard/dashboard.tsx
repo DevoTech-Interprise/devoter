@@ -4,12 +4,16 @@ import Sidebar from "../../components/Sidebar";
 import Header from "../../components/Header";
 import { useTheme } from "../../context/ThemeContext";
 import { useUser } from '../../context/UserContext';
+import { useCampaign } from '../../context/CampaignContext';
 import { userService, type User } from '../../services/userService';
 import { networkService, type NetworkUser } from '../../services/networkService';
 
 const Dashboard = () => {
   const { darkMode } = useTheme();
   const { user } = useUser();
+  const { campaign } = useCampaign();
+  
+  const primaryColor = campaign?.color_primary || '#2563eb';
   const [dashboardData, setDashboardData] = useState({
     totalSupporters: 0,
     campaigns: 0,
@@ -179,7 +183,7 @@ const Dashboard = () => {
 
       const recentActivity = recentUsers.map(user => ({
         type: 'new_supporter',
-        icon: <UserPlus className="text-blue-500 w-4 h-4" />,
+        icon: <UserPlus className="w-4 h-4" style={{ color: primaryColor }} />,
         bg: darkMode ? "bg-blue-900" : "bg-blue-100",
         text: `Novo apoiador: ${user.name}`,
         time: formatTimeAgo(user.created_at)

@@ -2,21 +2,22 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { User, Mail, Lock, MapPin, ChevronRight, ArrowDown } from "lucide-react";
 import PhoneInput from "react-phone-input-2";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast, ToastContainer } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import { inviteService } from "../../services/inviteService";
+import "react-phone-input-2/lib/style.css";
 
 const formSchema = z
   .object({
     nome: z.string().min(3, "Nome deve ter pelo menos 3 caracteres"),
     email: z.string().email("E-mail inválido"),
     telefone: z.string().min(8, "Telefone inválido"),
-    sexo: z.string().nonempty("Selecione o sexo"),
-    estado: z.string().nonempty("Selecione o estado"),
-    cidade: z.string().nonempty("Selecione a cidade"),
+    sexo: z.string().min(1, "Selecione o sexo"),
+    estado: z.string().min(1, "Selecione o estado"),
+    cidade: z.string().min(1, "Selecione a cidade"),
     bairro: z.string().min(2, "Informe o bairro"),
     senha: z
       .string()
@@ -36,6 +37,84 @@ const formSchema = z
 
 type FormType = z.infer<typeof formSchema>;
 
+// Componente de Input reutilizável - FORA do componente principal
+const InputField = ({ icon, error, campaign, ...props }: any) => (
+  <div>
+    <div className="flex items-center gap-3 border rounded-lg p-4 text-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white">
+      <span style={{ color: campaign?.campaign?.color_primary || '#2563eb' }}>{icon}</span>
+      <input 
+        {...props} 
+        className="w-full bg-transparent outline-none focus:outline-none"
+        style={{ caretColor: campaign?.campaign?.color_primary || '#2563eb' }}
+      />
+    </div>
+    {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
+  </div>
+);
+
+// Componente de Botão reutilizável - FORA do componente principal
+const ActionButton = ({ onClick, text, type = "button", campaign }: any) => (
+  <button
+    type={type}
+    onClick={onClick}
+    className="w-full text-white p-4 text-lg rounded-md hover:opacity-90 transition flex items-center justify-center gap-2"
+    style={{ backgroundColor: campaign?.campaign?.color_primary || '#2563eb' }}
+  >
+    {text} <ChevronRight className="w-5" />
+  </button>
+);
+
+// Componente de Progresso - FORA do componente principal
+const ProgressBar = ({ step, campaign, isMobile = false }: { step: number; campaign: any; isMobile?: boolean }) => {
+  if (isMobile) {
+    return (
+      <div className="flex justify-center mb-12">
+        {[1, 2, 3].map((s) => (
+          <div key={s} className="flex items-center">
+            <div
+              className={`w-10 h-10 rounded-full flex items-center justify-center font-bold border-2 transition-all ${
+                s <= step 
+                  ? 'text-white' 
+                  : 'text-gray-400 border-gray-300 dark:border-gray-600'
+              }`}
+              style={s <= step ? {
+                backgroundColor: campaign?.campaign.color_primary || '#2563eb',
+                borderColor: campaign?.campaign.color_primary || '#2563eb'
+              } : {}}
+            >
+              {s}
+            </div>
+            {s < 3 && (
+              <div
+                className={`w-12 h-1 mx-2 transition-all ${
+                  s < step ? '' : 'bg-gray-300 dark:bg-gray-700'
+                }`}
+                style={s < step ? {
+                  backgroundColor: campaign?.campaign.color_primary || '#2563eb'
+                } : {}}
+              ></div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex justify-center mb-6">
+      {[1, 2, 3].map((s) => (
+        <div
+          key={s}
+          className={`h-2 w-14 mx-1 rounded-full transition-all ${s <= step ? "" : "bg-gray-300 dark:bg-gray-700"}`}
+          style={s <= step ? {
+            backgroundColor: campaign?.campaign.color_primary || '#2563eb'
+          } : {}}
+        ></div>
+      ))}
+    </div>
+  );
+};
+
 const Invites = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
@@ -48,13 +127,26 @@ const Invites = () => {
   const formSectionRef = useRef<HTMLDivElement>(null);
 
   const {
-    register,
     handleSubmit,
-    setValue,
     watch,
+    control,
+    setValue,
     formState: { errors },
   } = useForm<FormType>({
     resolver: zodResolver(formSchema),
+    mode: 'onSubmit',
+    defaultValues: {
+      nome: '',
+      email: '',
+      telefone: '',
+      sexo: '',
+      estado: '',
+      cidade: '',
+      bairro: '',
+      senha: '',
+      confirmarSenha: '',
+      aceiteTermos: false,
+    },
   });
 
   // Carregar dados da campanha
@@ -91,7 +183,6 @@ const Invites = () => {
         const formTop = formSectionRef.current.getBoundingClientRect().top;
         const windowHeight = window.innerHeight;
         
-        // Se o topo do formulário estiver visível na tela (menos de 80% da altura da tela)
         if (formTop < windowHeight * 0.8) {
           setShowScrollIndicator(false);
         } else {
@@ -100,10 +191,8 @@ const Invites = () => {
       }
     };
 
-    // Verificar na montagem
     checkScrollPosition();
 
-    // Adicionar event listener
     window.addEventListener('scroll', checkScrollPosition);
     window.addEventListener('resize', checkScrollPosition);
 
@@ -113,29 +202,51 @@ const Invites = () => {
     };
   }, []);
 
+  const estadoSelecionado = watch("estado");
+
   // 📍 IBGE Estados e Cidades
   useEffect(() => {
-    fetch("https://servicodados.ibge.gov.br/api/v1/localidades/estados")
-      .then((res) => res.json())
-      .then((data) =>
-        setEstados(data.sort((a: any, b: any) => a.nome.localeCompare(b.nome)))
-      );
+    const fetchEstados = async () => {
+      try {
+        const response = await fetch("https://servicodados.ibge.gov.br/api/v1/localidades/estados");
+        const data = await response.json();
+        const sortedEstados = data.sort((a: any, b: any) => a.nome.localeCompare(b.nome));
+        setEstados(sortedEstados);
+      } catch (error) {
+        console.error('Erro ao carregar estados:', error);
+        toast.error('Erro ao carregar lista de estados');
+      }
+    };
+    
+    fetchEstados();
   }, []);
 
   useEffect(() => {
-    const estadoSelecionado = watch("estado");
-    if (estadoSelecionado) {
-      fetch(
-        `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${estadoSelecionado}/municipios`
-      )
-        .then((res) => res.json())
-        .then((data) =>
-          setCidades(data.sort((a: any, b: any) => a.nome.localeCompare(b.nome)))
-        );
-    }
-  }, [watch("estado")]);
+    const fetchCidades = async () => {
+      if (estadoSelecionado) {
+        try {
+          const response = await fetch(
+            `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${estadoSelecionado}/municipios`
+          );
+          const data = await response.json();
+          const sortedCidades = data.sort((a: any, b: any) => a.nome.localeCompare(b.nome));
+          setCidades(sortedCidades);
+        } catch (error) {
+          console.error('Erro ao carregar cidades:', error);
+          toast.error('Erro ao carregar lista de cidades');
+        }
+      } else {
+        setCidades([]);
+      }
+    };
+    
+    fetchCidades();
+  }, [estadoSelecionado]);
 
-  const handleNext = () => setStep((prev) => prev + 1);
+  const handleNext = () => {
+    setStep((prev) => prev + 1);
+  };
+  
   const handleBack = () => setStep((prev) => prev - 1);
 
   const onSubmit = async (data: FormType) => {
@@ -217,9 +328,9 @@ const Invites = () => {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-all">
       <ToastContainer position="top-right" autoClose={4000} />
       
-      {/* Layout para telas grandes (md para cima) - Mantido original */}
+      {/* Layout para telas grandes (md para cima) */}
       <div className="hidden md:flex flex-col md:flex-row min-h-screen">
-        {/* Banner Lateral - Telas Grandes */}
+        {/* Banner Lateral */}
         <div
           className="relative w-full md:w-1/2 flex flex-col items-center justify-center p-6 md:p-10 md:rounded-r-3xl overflow-hidden text-center"
           style={{
@@ -248,240 +359,285 @@ const Invites = () => {
           </div>
         </div>
 
-        {/* Formulário - Telas Grandes */}
+        {/* Formulário Desktop */}
         <div className="flex flex-col w-full md:w-1/2 justify-center px-8 py-10">
           <h2 className="text-3xl font-bold text-center mb-6 text-gray-800 dark:text-gray-100">
             Cadastro de Participante
           </h2>
-
-          {/* Progresso */}
-          <div className="flex justify-center mb-6">
-            {[1, 2, 3].map((s) => (
-              <div
-                key={s}
-                className={`h-2 w-14 mx-1 rounded-full transition-all ${s <= step ? "" : "bg-gray-300 dark:bg-gray-700"
-                  }`}
-                style={s <= step ? {
-                  backgroundColor: campaign?.campaign.color_primary || '#2563eb'
-                } : {}}
-              ></div>
-            ))}
-          </div>
-
-          <form onSubmit={handleSubmit(onSubmit)} className="max-w-lg mx-auto space-y-6">
-            <AnimatePresence mode="wait">
-              {/* Etapa 1 - Telas Grandes */}
-              {step === 1 && (
-                <motion.div
-                  key="step1"
-                  initial={{ opacity: 0, x: 30 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -30 }}
-                  transition={{ duration: 0.3 }}
-                  className="space-y-5"
-                >
-                  <InputLarge
-                    icon={<User />}
-                    placeholder="Nome completo"
-                    {...register("nome")}
-                    error={errors.nome?.message}
-                    campaign={campaign}
-                  />
-                  <InputLarge
-                    icon={<Mail />}
-                    type="email"
-                    placeholder="E-mail"
-                    {...register("email")}
-                    error={errors.email?.message}
-                    campaign={campaign}
-                  />
-                  <div>
-                    <PhoneInput
-                      country={"br"}
-                      value={watch("telefone")}
-                      onChange={(value) => setValue("telefone", value)}
-                      inputClass="!w-full !p-4 !pl-16 !text-lg !border !rounded-lg !border-gray-300 dark:!bg-gray-800 dark:!text-white"
-                      buttonClass="!border-gray-300 dark:!border-gray-700"
-                      inputStyle={{ width: "100%", height: "60px", paddingLeft: "64px" }}
+          <ProgressBar step={step} campaign={campaign} />
+          <form onSubmit={handleSubmit(onSubmit)} className="w-full max-w-lg mx-auto space-y-6">
+            {/* Etapa 1 */}
+            <div className={step === 1 ? 'block' : 'hidden'}>
+              <div className="space-y-5">
+                <Controller
+                  name="nome"
+                  control={control}
+                  render={({ field }) => (
+                    <InputField
+                      icon={<User />}
+                      placeholder="Nome completo"
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      error={errors.nome?.message}
+                      campaign={campaign}
                     />
-                    {errors.telefone && (
-                      <p className="text-red-500 text-sm mt-1">
-                        {errors.telefone.message}
-                      </p>
+                  )}
+                />
+                <Controller
+                  name="email"
+                  control={control}
+                  render={({ field }) => (
+                    <InputField
+                      icon={<Mail />}
+                      type="email"
+                      placeholder="E-mail"
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      error={errors.email?.message}
+                      campaign={campaign}
+                    />
+                  )}
+                />
+                <div>
+                  <Controller
+                    name="telefone"
+                    control={control}
+                    render={({ field }) => (
+                      <PhoneInput
+                        country={"br"}
+                        value={field.value}
+                        onChange={(value) => field.onChange(value)}
+                        inputClass="!w-full !p-4 !pl-16 !text-lg !border !rounded-lg !border-gray-300 dark:!bg-gray-800 dark:!text-white"
+                        buttonClass="!border-gray-300 dark:!border-gray-700"
+                        inputStyle={{ width: "100%", height: "60px", paddingLeft: "64px" }}
+                      />
                     )}
-                  </div>
-                  <select
-                    {...register("sexo")}
-                    className="w-full p-4 text-lg border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                  >
-                    <option value="">Selecione o sexo</option>
-                    <option value="M">Masculino</option>
-                    <option value="F">Feminino</option>
-                    <option value="NI">Outro</option>
-                  </select>
-                  {errors.sexo && (
-                    <p className="text-red-500 text-sm">{errors.sexo.message}</p>
+                  />
+                  {errors.telefone && (
+                    <p className="text-red-500 text-sm mt-1">{errors.telefone.message}</p>
                   )}
-                  <Button onClick={handleNext} text="Próximo" campaign={campaign} />
-                </motion.div>
-              )}
+                </div>
+                <Controller
+                  name="sexo"
+                  control={control}
+                  render={({ field }) => (
+                    <div>
+                      <select
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        className="w-full p-4 text-lg border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                      >
+                        <option value="">Selecione o sexo</option>
+                        <option value="M">Masculino</option>
+                        <option value="F">Feminino</option>
+                        <option value="NI">Outro</option>
+                      </select>
+                      {errors.sexo && (
+                        <p className="text-red-500 text-sm mt-1">{errors.sexo.message}</p>
+                      )}
+                    </div>
+                  )}
+                />
+                <ActionButton onClick={handleNext} text="Próximo" campaign={campaign} />
+              </div>
+            </div>
 
-              {/* Etapa 2 - Telas Grandes */}
-              {step === 2 && (
-                <motion.div
-                  key="step2"
-                  initial={{ opacity: 0, x: 30 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -30 }}
-                  transition={{ duration: 0.3 }}
-                  className="space-y-5"
-                >
-                  <div className="flex gap-2">
-                    <select
-                      {...register("estado")}
-                      className="w-1/2 p-4 text-lg border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                    >
-                      <option value="">Estado</option>
-                      {estados.map((e) => (
-                        <option key={e.id} value={e.sigla}>
-                          {e.nome}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      {...register("cidade")}
-                      className="w-1/2 p-4 text-lg border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                    >
-                      <option value="">Cidade</option>
-                      {cidades.map((c) => (
-                        <option key={c.id} value={c.nome}>
-                          {c.nome}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <InputLarge
-                    icon={<MapPin />}
-                    placeholder="Bairro"
-                    {...register("bairro")}
-                    error={errors.bairro?.message}
-                    campaign={campaign}
+            {/* Etapa 2 */}
+            <div className={step === 2 ? 'block' : 'hidden'}>
+              <div className="space-y-5">
+                <div className="flex gap-2">
+                  <Controller
+                    name="estado"
+                    control={control}
+                    render={({ field }) => (
+                      <select
+                        value={field.value}
+                        onChange={(e) => {
+                          field.onChange(e);
+                          setValue('cidade', '');
+                        }}
+                        onBlur={field.onBlur}
+                        className="w-1/2 p-4 text-lg border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                      >
+                        <option value="">Estado</option>
+                        {estados.map((e) => (
+                          <option key={e.id} value={e.sigla}>
+                            {e.nome}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   />
-                  <div className="flex justify-between gap-3">
-                    <button
-                      type="button"
-                      onClick={handleBack}
-                      className="text-white px-4 py-3 text-lg rounded-md hover:opacity-90 transition flex items-center justify-center gap-2 w-1/2"
-                      style={{
-                        backgroundColor: campaign?.campaign?.color_primary || '#2563eb'
-                      }}
-                    >
-                      Voltar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleNext}
-                      className="text-white px-4 py-3 text-lg rounded-md hover:opacity-90 transition flex items-center justify-center gap-2 w-1/2"
-                      style={{
-                        backgroundColor: campaign?.campaign?.color_primary || '#2563eb'
-                      }}
-                    >
-                      Próximo <ChevronRight className="w-5" />
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Etapa 3 - Telas Grandes */}
-              {step === 3 && (
-                <motion.div
-                  key="step3"
-                  initial={{ opacity: 0, x: 30 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -30 }}
-                  transition={{ duration: 0.3 }}
-                  className="space-y-5"
-                >
-                  <InputLarge
-                    icon={<Lock />}
-                    type="password"
-                    placeholder="Senha"
-                    {...register("senha")}
-                    error={errors.senha?.message}
-                    campaign={campaign}
+                  <Controller
+                    name="cidade"
+                    control={control}
+                    render={({ field }) => (
+                      <select
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        className="w-1/2 p-4 text-lg border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                      >
+                        <option value="">Cidade</option>
+                        {cidades.map((c) => (
+                          <option key={c.id} value={c.nome}>
+                            {c.nome}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   />
-                  <InputLarge
-                    icon={<Lock />}
-                    type="password"
-                    placeholder="Confirmar senha"
-                    {...register("confirmarSenha")}
-                    error={errors.confirmarSenha?.message}
-                    campaign={campaign}
-                  />
-
-                  <div className="flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      id="aceiteTermos"
-                      {...register("aceiteTermos")}
-                      className="mt-1 w-5 h-5 cursor-pointer accent-blue-600"
+                </div>
+                {(errors.estado || errors.cidade) && (
+                  <p className="text-red-500 text-sm">
+                    {errors.estado?.message || errors.cidade?.message}
+                  </p>
+                )}
+                <Controller
+                  name="bairro"
+                  control={control}
+                  render={({ field }) => (
+                    <InputField
+                      icon={<MapPin />}
+                      placeholder="Bairro"
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      error={errors.bairro?.message}
+                      campaign={campaign}
                     />
-                    <label htmlFor="aceiteTermos" className="text-sm text-gray-700 dark:text-gray-300 leading-snug">
-                      Aceito os{" "}
-                      <a
-                        href="/termos"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline text-blue-600 hover:text-blue-700"
-                      >
-                        Termos
-                      </a>{" "}
-                      e{" "}
-                      <a
-                        href="/privacidade"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline text-blue-600 hover:text-blue-700"
-                      >
-                        Política de Privacidade
-                      </a>
-                    </label>
-                  </div>
-                  {errors.aceiteTermos && (
-                    <p className="text-red-500 text-sm">{errors.aceiteTermos.message}</p>
                   )}
+                />
+                <div className="flex justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={handleBack}
+                    className="text-white px-4 py-3 text-lg rounded-md hover:opacity-90 transition flex items-center justify-center gap-2 w-1/2"
+                    style={{ backgroundColor: campaign?.campaign?.color_primary || '#2563eb' }}
+                  >
+                    Voltar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleNext}
+                    className="text-white px-4 py-3 text-lg rounded-md hover:opacity-90 transition flex items-center justify-center gap-2 w-1/2"
+                    style={{ backgroundColor: campaign?.campaign?.color_primary || '#2563eb' }}
+                  >
+                    Próximo <ChevronRight className="w-5" />
+                  </button>
+                </div>
+              </div>
+            </div>
 
-                  <div className="flex justify-between gap-3">
-                    <button
-                      type="button"
-                      onClick={handleBack}
-                      className="text-white p-4 text-lg rounded-md hover:opacity-90 transition flex items-center justify-center gap-2 w-1/2"
-                      style={{
-                        backgroundColor: campaign?.campaign?.color_primary || '#2563eb'
-                      }}
-                    >
-                      Voltar
-                    </button>
-                    <button
-                      type="submit"
-                      className="text-white p-4 text-lg rounded-md hover:opacity-90 transition flex items-center justify-center gap-2 w-1/2"
-                      style={{
-                        backgroundColor: campaign?.campaign?.color_primary || '#2563eb'
-                      }}
-                    >
-                      Finalizar
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/* Etapa 3 */}
+            <div className={step === 3 ? 'block' : 'hidden'}>
+              <div className="space-y-5">
+                <Controller
+                  name="senha"
+                  control={control}
+                  render={({ field }) => (
+                    <InputField
+                      icon={<Lock />}
+                      type="password"
+                      placeholder="Senha"
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      error={errors.senha?.message}
+                      campaign={campaign}
+                    />
+                  )}
+                />
+                <Controller
+                  name="confirmarSenha"
+                  control={control}
+                  render={({ field }) => (
+                    <InputField
+                      icon={<Lock />}
+                      type="password"
+                      placeholder="Confirmar senha"
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      error={errors.confirmarSenha?.message}
+                      campaign={campaign}
+                    />
+                  )}
+                />
+
+                <Controller
+                  name="aceiteTermos"
+                  control={control}
+                  render={({ field }) => (
+                    <div>
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          id="aceiteTermos"
+                          checked={field.value}
+                          onChange={(e) => field.onChange(e.target.checked)}
+                          className="mt-1 w-5 h-5 cursor-pointer accent-blue-600"
+                        />
+                        <label 
+                          htmlFor="aceiteTermos" 
+                          className="text-sm text-gray-700 dark:text-gray-300 leading-snug"
+                        >
+                          Aceito os{" "}
+                          <a
+                            href="/termos"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline text-blue-600 hover:text-blue-700"
+                          >
+                            Termos
+                          </a>{" "}
+                          e{" "}
+                          <a
+                            href="/privacidade"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline text-blue-600 hover:text-blue-700"
+                          >
+                            Política de Privacidade
+                          </a>
+                        </label>
+                      </div>
+                      {errors.aceiteTermos && (
+                        <p className="text-red-500 text-sm mt-1">{errors.aceiteTermos.message}</p>
+                      )}
+                    </div>
+                  )}
+                />
+
+                <div className="flex justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={handleBack}
+                    className="text-white p-4 text-lg rounded-md hover:opacity-90 transition flex items-center justify-center gap-2 w-1/2"
+                    style={{ backgroundColor: campaign?.campaign?.color_primary || '#2563eb' }}
+                  >
+                    Voltar
+                  </button>
+                  <button
+                    type="submit"
+                    className="text-white p-4 text-lg rounded-md hover:opacity-90 transition flex items-center justify-center gap-2 w-1/2"
+                    style={{ backgroundColor: campaign?.campaign?.color_primary || '#2563eb' }}
+                  >
+                    Finalizar
+                  </button>
+                </div>
+              </div>
+            </div>
           </form>
         </div>
       </div>
 
-      {/* Layout para telas pequenas (mobile) - Nova versão */}
+      {/* Layout para telas pequenas (mobile) */}
       <div className="block md:hidden">
-        {/* Banner - Foco total na campanha política */}
+        {/* Banner Mobile */}
         <div
           className="relative w-full h-screen flex flex-col items-center justify-center p-6 text-center overflow-hidden"
           style={{
@@ -490,7 +646,6 @@ const Invites = () => {
               : 'linear-gradient(135deg, #2563eb, #4f46e5)'
           }}
         >
-          {/* Imagem de fundo do candidato/campanha */}
           {campaign?.campaign.logo && (
             <img
               src={campaign.campaign.logo}
@@ -499,9 +654,7 @@ const Invites = () => {
             />
           )}
           
-          {/* Conteúdo Principal - Centralizado */}
           <div className="relative z-10 text-white max-w-2xl mx-auto flex flex-col items-center justify-center flex-1">
-            {/* Logo */}
             {campaign?.campaign.logo && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
@@ -516,7 +669,6 @@ const Invites = () => {
               </motion.div>
             )}
 
-            {/* Nome do Candidato/Campanha */}
             <motion.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -526,7 +678,6 @@ const Invites = () => {
               {campaign?.campaign.name}
             </motion.h1>
 
-            {/* Mensagem Direta */}
             <motion.p
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -536,7 +687,6 @@ const Invites = () => {
               Junte-se à nossa campanha
             </motion.p>
 
-            {/* Chamada para Ação */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -547,7 +697,6 @@ const Invites = () => {
             </motion.div>
           </div>
 
-          {/* Informação do Convite - Parte Inferior Sutil */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -562,7 +711,6 @@ const Invites = () => {
             </div>
           </motion.div>
 
-          {/* Indicador de Scroll - Fixo na parte de baixo da tela, desaparece ao rolar */}
           <AnimatePresence>
             {showScrollIndicator && (
               <motion.div
@@ -586,7 +734,7 @@ const Invites = () => {
           </AnimatePresence>
         </div>
 
-        {/* Formulário - Design limpo e objetivo */}
+        {/* Formulário Mobile */}
         <div 
           ref={formSectionRef}
           className="flex flex-col justify-center px-6 py-16 min-h-screen bg-gray-50 dark:bg-gray-900"
@@ -605,243 +753,273 @@ const Invites = () => {
               </p>
             </motion.div>
 
-            {/* Progresso Simples */}
-            <div className="flex justify-center mb-12">
-              {[1, 2, 3].map((s) => (
-                <div key={s} className="flex items-center">
-                  <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center font-bold border-2 transition-all ${
-                      s <= step 
-                        ? 'text-white border-white' 
-                        : 'text-gray-400 border-gray-300 dark:border-gray-600'
-                    }`}
-                    style={s <= step ? {
-                      backgroundColor: campaign?.campaign.color_primary || '#2563eb',
-                      borderColor: campaign?.campaign.color_primary || '#2563eb'
-                    } : {}}
-                  >
-                    {s}
-                  </div>
-                  {s < 3 && (
-                    <div
-                      className={`w-12 h-1 mx-2 transition-all ${
-                        s < step 
-                          ? '' 
-                          : 'bg-gray-300 dark:bg-gray-700'
-                      }`}
-                      style={s < step ? {
-                        backgroundColor: campaign?.campaign.color_primary || '#2563eb'
-                      } : {}}
-                    ></div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <form onSubmit={handleSubmit(onSubmit)} className="max-w-md mx-auto space-y-6">
-              <AnimatePresence mode="wait">
-                {/* Etapa 1 - Mobile */}
-                {step === 1 && (
-                  <motion.div
-                    key="step1"
-                    initial={{ opacity: 0, x: 30 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -30 }}
-                    className="space-y-5"
-                  >
-                    <InputLarge
-                      icon={<User />}
-                      placeholder="Nome completo"
-                      {...register("nome")}
-                      error={errors.nome?.message}
-                      campaign={campaign}
-                    />
-                    <InputLarge
-                      icon={<Mail />}
-                      type="email"
-                      placeholder="E-mail"
-                      {...register("email")}
-                      error={errors.email?.message}
-                      campaign={campaign}
-                    />
-                    <div>
-                      <PhoneInput
-                        country={"br"}
-                        value={watch("telefone")}
-                        onChange={(value) => setValue("telefone", value)}
-                        inputClass="!w-full !p-4 !pl-16 !text-lg !border !rounded-lg !border-gray-300 dark:!bg-gray-800 dark:!text-white"
-                        buttonClass="!border-gray-300 dark:!border-gray-700"
-                        inputStyle={{ width: "100%", height: "60px", paddingLeft: "64px" }}
+            <ProgressBar step={step} campaign={campaign} isMobile />
+            <form onSubmit={handleSubmit(onSubmit)} className="w-full max-w-lg mx-auto space-y-6">
+              {/* Etapa 1 */}
+              <div className={step === 1 ? 'block' : 'hidden'}>
+                <div className="space-y-5">
+                  <Controller
+                    name="nome"
+                    control={control}
+                    render={({ field }) => (
+                      <InputField
+                        icon={<User />}
+                        placeholder="Nome completo"
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        error={errors.nome?.message}
+                        campaign={campaign}
                       />
-                      {errors.telefone && (
-                        <p className="text-red-500 text-sm mt-1">
-                          {errors.telefone.message}
-                        </p>
+                    )}
+                  />
+                  <Controller
+                    name="email"
+                    control={control}
+                    render={({ field }) => (
+                      <InputField
+                        icon={<Mail />}
+                        type="email"
+                        placeholder="E-mail"
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        error={errors.email?.message}
+                        campaign={campaign}
+                      />
+                    )}
+                  />
+                  <div>
+                    <Controller
+                      name="telefone"
+                      control={control}
+                      render={({ field }) => (
+                        <PhoneInput
+                          country={"br"}
+                          value={field.value}
+                          onChange={(value) => field.onChange(value)}
+                          inputClass="!w-full !p-4 !pl-16 !text-lg !border !rounded-lg !border-gray-300 dark:!bg-gray-800 dark:!text-white"
+                          buttonClass="!border-gray-300 dark:!border-gray-700"
+                          inputStyle={{ width: "100%", height: "60px", paddingLeft: "64px" }}
+                        />
                       )}
-                    </div>
-                    <select
-                      {...register("sexo")}
-                      className="w-full p-4 text-lg border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                    >
-                      <option value="">Selecione o sexo</option>
-                      <option value="M">Masculino</option>
-                      <option value="F">Feminino</option>
-                      <option value="NI">Outro</option>
-                    </select>
-                    {errors.sexo && (
-                      <p className="text-red-500 text-sm">{errors.sexo.message}</p>
+                    />
+                    {errors.telefone && (
+                      <p className="text-red-500 text-sm mt-1">{errors.telefone.message}</p>
                     )}
-                    <Button onClick={handleNext} text="Próximo" campaign={campaign} />
-                  </motion.div>
-                )}
+                  </div>
+                  <Controller
+                    name="sexo"
+                    control={control}
+                    render={({ field }) => (
+                      <div>
+                        <select
+                          value={field.value}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          className="w-full p-4 text-lg border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                        >
+                          <option value="">Selecione o sexo</option>
+                          <option value="M">Masculino</option>
+                          <option value="F">Feminino</option>
+                          <option value="NI">Outro</option>
+                        </select>
+                        {errors.sexo && (
+                          <p className="text-red-500 text-sm mt-1">{errors.sexo.message}</p>
+                        )}
+                      </div>
+                    )}
+                  />
+                  <ActionButton onClick={handleNext} text="Próximo" campaign={campaign} />
+                </div>
+              </div>
 
-                {/* Etapa 2 - Mobile */}
-                {step === 2 && (
-                  <motion.div
-                    key="step2"
-                    initial={{ opacity: 0, x: 30 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -30 }}
-                    className="space-y-5"
-                  >
-                    <div className="flex gap-2">
-                      <select
-                        {...register("estado")}
-                        className="w-1/2 p-4 text-lg border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                      >
-                        <option value="">Estado</option>
-                        {estados.map((e) => (
-                          <option key={e.id} value={e.sigla}>
-                            {e.nome}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        {...register("cidade")}
-                        className="w-1/2 p-4 text-lg border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                      >
-                        <option value="">Cidade</option>
-                        {cidades.map((c) => (
-                          <option key={c.id} value={c.nome}>
-                            {c.nome}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <InputLarge
-                      icon={<MapPin />}
-                      placeholder="Bairro"
-                      {...register("bairro")}
-                      error={errors.bairro?.message}
-                      campaign={campaign}
+              {/* Etapa 2 */}
+              <div className={step === 2 ? 'block' : 'hidden'}>
+                <div className="space-y-5">
+                  <div className="flex gap-2">
+                    <Controller
+                      name="estado"
+                      control={control}
+                      render={({ field }) => (
+                        <select
+                          value={field.value}
+                          onChange={(e) => {
+                            field.onChange(e);
+                            setValue('cidade', '');
+                          }}
+                          onBlur={field.onBlur}
+                          className="w-1/2 p-4 text-lg border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                        >
+                          <option value="">Estado</option>
+                          {estados.map((e) => (
+                            <option key={e.id} value={e.sigla}>
+                              {e.nome}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     />
-                    <div className="flex justify-between gap-3">
-                      <button
-                        type="button"
-                        onClick={handleBack}
-                        className="text-white px-4 py-3 text-lg rounded-md hover:opacity-90 transition flex items-center justify-center gap-2 w-1/2"
-                        style={{
-                          backgroundColor: campaign?.campaign?.color_primary || '#2563eb'
-                        }}
-                      >
-                        Voltar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleNext}
-                        className="text-white px-4 py-3 text-lg rounded-md hover:opacity-90 transition flex items-center justify-center gap-2 w-1/2"
-                        style={{
-                          backgroundColor: campaign?.campaign?.color_primary || '#2563eb'
-                        }}
-                      >
-                        Próximo <ChevronRight className="w-5" />
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* Etapa 3 - Mobile */}
-                {step === 3 && (
-                  <motion.div
-                    key="step3"
-                    initial={{ opacity: 0, x: 30 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -30 }}
-                    className="space-y-5"
-                  >
-                    <InputLarge
-                      icon={<Lock />}
-                      type="password"
-                      placeholder="Senha"
-                      {...register("senha")}
-                      error={errors.senha?.message}
-                      campaign={campaign}
+                    <Controller
+                      name="cidade"
+                      control={control}
+                      render={({ field }) => (
+                        <select
+                          value={field.value}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          className="w-1/2 p-4 text-lg border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                        >
+                          <option value="">Cidade</option>
+                          {cidades.map((c) => (
+                            <option key={c.id} value={c.nome}>
+                              {c.nome}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     />
-                    <InputLarge
-                      icon={<Lock />}
-                      type="password"
-                      placeholder="Confirmar senha"
-                      {...register("confirmarSenha")}
-                      error={errors.confirmarSenha?.message}
-                      campaign={campaign}
-                    />
-
-                    <div className="flex items-start gap-3">
-                      <input
-                        type="checkbox"
-                        id="aceiteTermos"
-                        {...register("aceiteTermos")}
-                        className="mt-1 w-5 h-5 cursor-pointer accent-blue-600"
+                  </div>
+                  {(errors.estado || errors.cidade) && (
+                    <p className="text-red-500 text-sm">
+                      {errors.estado?.message || errors.cidade?.message}
+                    </p>
+                  )}
+                  <Controller
+                    name="bairro"
+                    control={control}
+                    render={({ field }) => (
+                      <InputField
+                        icon={<MapPin />}
+                        placeholder="Bairro"
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        error={errors.bairro?.message}
+                        campaign={campaign}
                       />
-                      <label htmlFor="aceiteTermos" className="text-sm text-gray-700 dark:text-gray-300 leading-snug">
-                        Aceito os{" "}
-                        <a
-                          href="/termos"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline text-blue-600 hover:text-blue-700"
-                        >
-                          Termos
-                        </a>{" "}
-                        e{" "}
-                        <a
-                          href="/privacidade"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline text-blue-600 hover:text-blue-700"
-                        >
-                          Política de Privacidade
-                        </a>
-                      </label>
-                    </div>
-                    {errors.aceiteTermos && (
-                      <p className="text-red-500 text-sm">{errors.aceiteTermos.message}</p>
                     )}
+                  />
+                  <div className="flex justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={handleBack}
+                      className="text-white px-4 py-3 text-lg rounded-md hover:opacity-90 transition flex items-center justify-center gap-2 w-1/2"
+                      style={{ backgroundColor: campaign?.campaign?.color_primary || '#2563eb' }}
+                    >
+                      Voltar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleNext}
+                      className="text-white px-4 py-3 text-lg rounded-md hover:opacity-90 transition flex items-center justify-center gap-2 w-1/2"
+                      style={{ backgroundColor: campaign?.campaign?.color_primary || '#2563eb' }}
+                    >
+                      Próximo <ChevronRight className="w-5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
 
-                    <div className="flex justify-between gap-3">
-                      <button
-                        type="button"
-                        onClick={handleBack}
-                        className="text-white p-4 text-lg rounded-md hover:opacity-90 transition flex items-center justify-center gap-2 w-1/2"
-                        style={{
-                          backgroundColor: campaign?.campaign?.color_primary || '#2563eb'
-                        }}
-                      >
-                        Voltar
-                      </button>
-                      <button
-                        type="submit"
-                        className="text-white p-4 text-lg rounded-md hover:opacity-90 transition flex items-center justify-center gap-2 w-1/2"
-                        style={{
-                          backgroundColor: campaign?.campaign?.color_primary || '#2563eb'
-                        }}
-                      >
-                        Finalizar
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {/* Etapa 3 */}
+              <div className={step === 3 ? 'block' : 'hidden'}>
+                <div className="space-y-5">
+                  <Controller
+                    name="senha"
+                    control={control}
+                    render={({ field }) => (
+                      <InputField
+                        icon={<Lock />}
+                        type="password"
+                        placeholder="Senha"
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        error={errors.senha?.message}
+                        campaign={campaign}
+                      />
+                    )}
+                  />
+                  <Controller
+                    name="confirmarSenha"
+                    control={control}
+                    render={({ field }) => (
+                      <InputField
+                        icon={<Lock />}
+                        type="password"
+                        placeholder="Confirmar senha"
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        error={errors.confirmarSenha?.message}
+                        campaign={campaign}
+                      />
+                    )}
+                  />
+
+                  <Controller
+                    name="aceiteTermos"
+                    control={control}
+                    render={({ field }) => (
+                      <div>
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            id="aceiteTermosMobile"
+                            checked={field.value}
+                            onChange={(e) => field.onChange(e.target.checked)}
+                            className="mt-1 w-5 h-5 cursor-pointer accent-blue-600"
+                          />
+                          <label 
+                            htmlFor="aceiteTermosMobile" 
+                            className="text-sm text-gray-700 dark:text-gray-300 leading-snug"
+                          >
+                            Aceito os{" "}
+                            <a
+                              href="/termos"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="underline text-blue-600 hover:text-blue-700"
+                            >
+                              Termos
+                            </a>{" "}
+                            e{" "}
+                            <a
+                              href="/privacidade"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="underline text-blue-600 hover:text-blue-700"
+                            >
+                              Política de Privacidade
+                            </a>
+                          </label>
+                        </div>
+                        {errors.aceiteTermos && (
+                          <p className="text-red-500 text-sm mt-1">{errors.aceiteTermos.message}</p>
+                        )}
+                      </div>
+                    )}
+                  />
+
+                  <div className="flex justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={handleBack}
+                      className="text-white p-4 text-lg rounded-md hover:opacity-90 transition flex items-center justify-center gap-2 w-1/2"
+                      style={{ backgroundColor: campaign?.campaign?.color_primary || '#2563eb' }}
+                    >
+                      Voltar
+                    </button>
+                    <button
+                      type="submit"
+                      className="text-white p-4 text-lg rounded-md hover:opacity-90 transition flex items-center justify-center gap-2 w-1/2"
+                      style={{ backgroundColor: campaign?.campaign?.color_primary || '#2563eb' }}
+                    >
+                      Finalizar
+                    </button>
+                  </div>
+                </div>
+              </div>
             </form>
           </div>
         </div>
@@ -849,33 +1027,5 @@ const Invites = () => {
     </div>
   );
 };
-
-// 🔧 Componentes auxiliares (mantidos)
-const InputLarge = ({ icon, error, campaign, ...props }: any) => (
-  <div>
-    <div className="flex items-center gap-3 border rounded-lg p-4 text-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white">
-      <span style={{ color: campaign?.campaign?.color_primary || '#2563eb' }}>{icon}</span>
-      <input {...props} className="w-full bg-transparent outline-none focus:outline-none"
-        style={{
-          caretColor: campaign?.campaign?.color_primary || '#2563eb'
-        }}
-      />
-    </div>
-    {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
-  </div>
-);
-
-const Button = ({ onClick, text, campaign }: any) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className="w-full text-white p-4 text-lg rounded-md hover:opacity-90 transition flex items-center justify-center gap-2"
-    style={{
-      backgroundColor: campaign?.campaign?.color_primary || '#2563eb',
-    }}
-  >
-    {text} <ChevronRight className="w-5" />
-  </button>
-);
 
 export default Invites;

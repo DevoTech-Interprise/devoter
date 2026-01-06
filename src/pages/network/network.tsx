@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Users, Loader2, ChevronDown, ChevronRight, User, Mail, Crown, Shield, Filter, Building2, Star } from 'lucide-react';
 import Sidebar from '../../components/Sidebar';
 import { useUser } from '../../context/UserContext';
+import { useTheme } from '../../context/ThemeContext';
+import { useCampaignColor } from '../../components/CampaignThemed';
 import { networkService, type NetworkUser } from '../../services/networkService';
 import { campaignService, type Campaign } from '../../services/campaignService';
 import { userService, type User as UserType } from '../../services/userService';
@@ -16,6 +18,8 @@ interface EnhancedNetworkUser extends NetworkUser {
 
 const NetworkPage = () => {
   const { user } = useUser();
+  const { darkMode } = useTheme();
+  const { primaryColor } = useCampaignColor();
   const [network, setNetwork] = useState<EnhancedNetworkUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedNodes, setExpandedNodes] = useState<Set<number>>(new Set());
@@ -576,7 +580,7 @@ const NetworkPage = () => {
 
   if (loading) {
     return (
-      <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
+      <div className={`flex h-screen ${darkMode ? "bg-gray-900" : "bg-gray-100"}`}>
         <Sidebar />
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
@@ -591,7 +595,7 @@ const NetworkPage = () => {
   const networkStats = filteredNetwork ? networkService.calculateNetworkStats(filteredNetwork) : null;
 
   return (
-    <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
+    <div className={`flex h-screen ${darkMode ? "bg-gray-900" : "bg-gray-100"}`}>
       <Sidebar />
       <div className="flex-1 overflow-auto">
         <div className="p-8 py-15">

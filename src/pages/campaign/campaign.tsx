@@ -8,6 +8,8 @@ import type { User } from '../../services/userService';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useUser } from '../../context/UserContext';
+import { useTheme } from '../../context/ThemeContext';
+import { useCampaignColor } from '../../components/CampaignThemed';
 
 type FormData = {
     name: string;
@@ -16,6 +18,7 @@ type FormData = {
     color_primary: string;
     color_secondary: string;
     operator: string; // String única com IDs separados por vírgula
+    link_youtube: string;
 };
 
 // Interface para agrupar campanhas por criador
@@ -26,6 +29,8 @@ interface CampaignsByCreator {
 
 const CampaignsPage = () => {
     const { user, updateCampaign, refreshUser } = useUser();
+    const { darkMode } = useTheme();
+    const { primaryColor } = useCampaignColor();
     const [campaigns, setCampaigns] = useState<Campaign[]>([]);
     const [campaignsByCreator, setCampaignsByCreator] = useState<CampaignsByCreator[]>([]);
     const [availableManagers, setAvailableManagers] = useState<User[]>([]);
@@ -46,6 +51,7 @@ const CampaignsPage = () => {
         color_primary: '#FCAF15',
         color_secondary: '#0833AF',
         operator: '', // String vazia inicialmente
+        link_youtube: '',
     });
     const [logoPreview, setLogoPreview] = useState<string>('');
     const [creatorFilter, setCreatorFilter] = useState<string>('all');
@@ -214,7 +220,8 @@ const CampaignsPage = () => {
             logo: '',
             color_primary: '#FCAF15',
             color_secondary: '#0833AF',
-            operator: '' // String vazia
+            operator: '', // String vazia
+            link_youtube: '',
         });
         setLogoPreview('');
         setFormOpen(true);
@@ -234,7 +241,8 @@ const CampaignsPage = () => {
             logo: c.logo,
             color_primary: c.color_primary || '#FCAF15',
             color_secondary: c.color_secondary || '#0833AF',
-            operator: c.operator || '' // String com IDs separados por vírgula
+            operator: c.operator || '', // String com IDs separados por vírgula
+            link_youtube: c.link_youtube || '',
         });
         setLogoPreview(c.logo);
         setFormOpen(true);
@@ -328,7 +336,8 @@ const CampaignsPage = () => {
                 color_secondary: form.color_secondary,
                 created_by: userId?.toString(),
                 logo: form.logo instanceof File ? form.logo : form.logo || undefined,
-                operator: form.operator
+                operator: form.operator,
+                link_youtube: form.link_youtube
             };
 
             console.log('Payload enviado:', payload);
@@ -588,7 +597,7 @@ const CampaignsPage = () => {
     };
 
     return (
-        <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
+        <div className={`flex h-screen ${darkMode ? "bg-gray-900" : "bg-gray-100"}`}>
             <Sidebar />
             <div className="flex-1 overflow-auto p-8">
                 <ToastContainer position="top-right" />
@@ -596,7 +605,7 @@ const CampaignsPage = () => {
                     <header className="flex pt-7 flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
                         <div className="flex flex-col">
                             <h1 className="text-3xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                                <Palette className="w-7 h-7 text-blue-600" />
+                                <Palette className="w-7 h-7" style={{ color: primaryColor }} />
                                 Campanhas
                                 {isSuperUser && (
                                     <span className="ml-2 text-sm bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300 px-2 py-1 rounded-full">
@@ -610,7 +619,8 @@ const CampaignsPage = () => {
                         </div>
                         <button
                             onClick={openCreate}
-                            className="flex items-center gap-2 px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow transition"
+                            style={{ backgroundColor: primaryColor }}
+                            className="flex items-center gap-2 px-5 py-2 rounded-lg hover:opacity-90 text-white font-semibold shadow transition"
                         >
                             <Plus className="w-5 h-5" /> Nova Campanha
                         </button>
@@ -620,7 +630,7 @@ const CampaignsPage = () => {
                     {isSuperUser && campaignsByCreator.length > 0 && (
                         <div className="mb-6 bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                             <div className="flex items-center gap-3 mb-3">
-                                <Filter className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                <Filter className="w-5 h-5" style={{ color: primaryColor }} />
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                     Filtrar por Criador:
                                 </label>
@@ -628,10 +638,16 @@ const CampaignsPage = () => {
                             <div className="flex flex-wrap gap-2">
                                 <button
                                     onClick={() => setCreatorFilter('all')}
-                                    className={`px-4 py-2 rounded-lg border transition-all ${creatorFilter === 'all'
-                                            ? 'bg-blue-100 border-blue-400 text-blue-800 dark:bg-blue-900/40 dark:border-blue-500 dark:text-blue-200 shadow-md'
+                                    style={creatorFilter === 'all' ? {
+                                        backgroundColor: `${primaryColor}20`,
+                                        borderColor: primaryColor,
+                                        color: primaryColor
+                                    } : {}}
+                                    className={`px-4 py-2 rounded-lg border transition-all ${
+                                        creatorFilter === 'all'
+                                            ? 'shadow-md font-medium'
                                             : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700'
-                                        }`}
+                                    }`}
                                 >
                                     Todos os Criadores
                                 </button>
@@ -639,10 +655,16 @@ const CampaignsPage = () => {
                                     <button
                                         key={group.creator.id}
                                         onClick={() => setCreatorFilter(group.creator.id)}
-                                        className={`px-4 py-2 rounded-lg border transition-all ${creatorFilter === group.creator.id
-                                                ? 'bg-blue-100 border-blue-400 text-blue-800 dark:bg-blue-900/40 dark:border-blue-500 dark:text-blue-200 shadow-md'
+                                        style={creatorFilter === group.creator.id ? {
+                                            backgroundColor: `${primaryColor}20`,
+                                            borderColor: primaryColor,
+                                            color: primaryColor
+                                        } : {}}
+                                        className={`px-4 py-2 rounded-lg border transition-all ${
+                                            creatorFilter === group.creator.id
+                                                ? 'shadow-md font-medium'
                                                 : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700'
-                                            }`}
+                                        }`}
                                     >
                                         {group.creator.name}
                                         {group.creator.id === user?.id && (
@@ -792,6 +814,21 @@ const CampaignsPage = () => {
                                             rows={3}
                                             required
                                         />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Link do YouTube</label>
+                                        <input
+                                            name="link_youtube"
+                                            value={form.link_youtube}
+                                            onChange={handleChange}
+                                            className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 text-gray-900 dark:text-white"
+                                            placeholder="https://www.youtube.com/watch?v=..."
+                                            type="url"
+                                        />
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                            Cole o link completo do vídeo do YouTube da campanha
+                                        </p>
                                     </div>
 
                                     {/* Seletor de Operadores - Inclui disponíveis e já vinculados */}

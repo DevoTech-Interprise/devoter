@@ -4,6 +4,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import PrivateRoute from "./routes/PrivateRoutes";
 import { ThemeProvider } from "./context/ThemeContext";
 import { UserProvider } from "./context/UserContext";
+import { CampaignProvider } from "./context/CampaignContext";
 import { sessionService } from "./services/sessionService";
 
 import Login from "./pages/login/login";
@@ -46,22 +47,23 @@ function App() {
   return (
     <ThemeProvider>
       <UserProvider>
-        <Router>
-          {/* ToastContainer ADICIONADO AQUI - É OBRIGATÓRIO */}
-          <ToastContainer
-            position="top-right"
-            autoClose={5000}
-            hideProgressBar={false}
-            newestOnTop={false}
-            closeOnClick
-            rtl={false}
-            pauseOnFocusLoss
-            draggable
-            pauseOnHover
-            theme="colored"
-          />
+        <CampaignProvider>
+          <Router>
+            {/* ToastContainer ADICIONADO AQUI - É OBRIGATÓRIO */}
+            <ToastContainer
+              position="top-right"
+              autoClose={5000}
+              hideProgressBar={false}
+              newestOnTop={false}
+              closeOnClick
+              rtl={false}
+              pauseOnFocusLoss
+              draggable
+              pauseOnHover
+              theme="colored"
+            />
 
-          <Routes>
+            <Routes>
             {/* Páginas públicas */}
             <Route path="/" element={<RootRedirect />} />
             <Route path="/login" element={<Login />} />
@@ -158,6 +160,7 @@ function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>
+      </CampaignProvider>
       </UserProvider>
     </ThemeProvider>
   );

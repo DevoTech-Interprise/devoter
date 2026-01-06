@@ -17,7 +17,7 @@ export const TinyMCEEditor: React.FC<TinyMCEEditorProps> = ({
     <Editor
       value={value}
       onEditorChange={onChange}
-      apiKey='39lfx1axehn4sxz8qz4293svpfvxsgeev83inru5vuaioev9'
+      apiKey='pt7ck66l6yzvbtt0t36vx7h0qs9c2gaj7yo7dkmx9rqzip9o'
       init={{
         height,
         menubar: 'file edit view insert format tools table help',

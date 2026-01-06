@@ -18,6 +18,7 @@ import {
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTheme } from "../context/ThemeContext";
 import { useUser } from "../context/UserContext";
+import { useCampaign } from "../context/CampaignContext";
 import { authService } from "../services/authService";
 import { sessionService } from "../services/sessionService";
 import { toast } from "react-toastify";
@@ -68,6 +69,9 @@ const SidebarItem = ({
   const location = useLocation();
   const navigate = useNavigate();
   const { darkMode } = useTheme();
+  const { campaign } = useCampaign();
+  
+  const primaryColor = campaign?.color_primary || '#2563eb';
 
   // Para itens principais, verifica se o path começa com a localização atual
   // Para subitens, verifica exata correspondência
@@ -88,9 +92,10 @@ const SidebarItem = ({
   return (
     <button
       onClick={handleClick}
+      style={isActive ? { backgroundColor: primaryColor } : {}}
       className={`flex items-center gap-3 w-full p-3 rounded-lg transition
         ${isActive
-          ? "bg-blue-600 text-white"
+          ? "text-white"
           : darkMode
             ? "hover:bg-gray-800 text-gray-100"
             : "hover:bg-blue-50 text-gray-700"
@@ -99,7 +104,7 @@ const SidebarItem = ({
         ${isSubmenu ? "pl-8 text-sm" : ""}
         ${extraClass}`}
     >
-      <span className={isActive ? "text-white" : darkMode ? "text-gray-300" : "text-blue-600"}>
+      <span className={isActive ? "text-white" : darkMode ? "text-gray-300" : ""} style={!isActive && !darkMode ? { color: primaryColor } : {}}>
         {icon}
       </span>
       {isOpen && <span className="text-sm font-medium">{text}</span>}
@@ -126,6 +131,9 @@ const Submenu = ({
 }: SubmenuProps) => {
   const location = useLocation();
   const { darkMode } = useTheme();
+  const { campaign } = useCampaign();
+  
+  const primaryColor = campaign?.color_primary || '#2563eb';
 
   // Verifica se algum item do submenu está ativo
   const isActive = items.some(item => location.pathname === item.path);
@@ -135,9 +143,10 @@ const Submenu = ({
       {/* Botão do submenu */}
       <button
         onClick={onToggle}
+        style={isActive ? { backgroundColor: primaryColor } : {}}
         className={`flex items-center justify-between w-full p-3 rounded-lg transition
           ${isActive
-            ? "bg-blue-600 text-white"
+            ? "text-white"
             : darkMode
               ? "hover:bg-gray-800 text-gray-100"
               : "hover:bg-blue-50 text-gray-700"
@@ -145,7 +154,7 @@ const Submenu = ({
           ${!isOpen ? "justify-center" : ""}`}
       >
         <div className="flex items-center gap-3">
-          <span className={isActive ? "text-white" : darkMode ? "text-gray-300" : "text-blue-600"}>
+          <span className={isActive ? "text-white" : darkMode ? "text-gray-300" : ""} style={!isActive && !darkMode ? { color: primaryColor } : {}}>
             {icon}
           </span>
           {isOpen && <span className="text-sm font-medium">{text}</span>}
@@ -182,8 +191,11 @@ const Sidebar = () => {
   const [networksSubmenuOpen, setNetworksSubmenuOpen] = useState(false);
   const { darkMode, toggleDarkMode } = useTheme();
   const { user, clearUser } = useUser();
+  const { campaign } = useCampaign();
   const navigate = useNavigate();
   const location = useLocation();
+  
+  const primaryColor = campaign?.color_primary || '#2563eb';
 
   const toggleSidebar = () => setIsOpen(!isOpen);
   const toggleMobile = () => setMobileOpen(!mobileOpen);
@@ -200,30 +212,6 @@ const Sidebar = () => {
 
     // Pega a primeira letra do primeiro nome e a primeira letra do último nome
     return (names[0].charAt(0) + names[names.length - 1].charAt(0)).toUpperCase();
-  };
-
-  // Função para gerar uma cor baseada no nome do usuário (para consistência)
-  const getUserColor = () => {
-    if (!user?.name) return '#0D8ABC'; // Cor padrão
-
-    const colors = [
-      '#0D8ABC', // Azul
-      '#10B981', // Verde
-      '#F59E0B', // Amarelo
-      '#EF4444', // Vermelho
-      '#8B5CF6', // Roxo
-      '#EC4899', // Rosa
-      '#06B6D4', // Ciano
-      '#84CC16', // Lima
-    ];
-
-    // Gera um índice baseado no nome para sempre retornar a mesma cor para o mesmo usuário
-    let hash = 0;
-    for (let i = 0; i < user.name.length; i++) {
-      hash = user.name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-
-    return colors[Math.abs(hash) % colors.length];
   };
 
   const handleLogout = async () => {
@@ -339,7 +327,8 @@ const Sidebar = () => {
       {/* Botão mobile */}
       <button
         onClick={toggleMobile}
-        className="md:hidden fixed top-4 left-4 z-50 bg-blue-600 text-white p-2 rounded-lg shadow-lg hover:bg-blue-700 transition-colors"
+        style={{ backgroundColor: primaryColor }}
+        className="md:hidden fixed top-4 left-4 z-50 text-white p-2 rounded-lg shadow-lg hover:opacity-90 transition-all"
       >
         {mobileOpen ? <X size={20} /> : <Menu size={20} />}
       </button>
@@ -365,11 +354,11 @@ const Sidebar = () => {
           }`}>
           <div className={`flex items-center gap-3 transition-all duration-300 ${isOpen ? "opacity-100" : "opacity-0 w-0"
             }`}>
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: primaryColor }}>
               <Award size={18} className="text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-blue-600">Devoter</h1>
+              <h1 className="font-bold" style={{ color: primaryColor, fontSize: '1.125rem' }}>Soudabase</h1>
               <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">
                 {user?.role || "user"}
               </p>
@@ -379,10 +368,14 @@ const Sidebar = () => {
             onClick={toggleSidebar}
             className={`
               hidden md:flex items-center justify-center text-gray-500 dark:text-gray-400 
-              hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-800
+              hover:bg-gray-100 dark:hover:bg-gray-800
               rounded-lg p-1.5 transition-colors
               ${!isOpen ? "w-8 h-8" : ""}
             `}
+            style={!darkMode ? { color: primaryColor } : {}}
+            onMouseEnter={(e) => {
+              if (!darkMode) e.currentTarget.style.color = primaryColor;
+            }}
           >
             {isOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
@@ -429,7 +422,7 @@ const Sidebar = () => {
             >
               <div
                 className="w-10 h-10 rounded-full border border-gray-300 dark:border-gray-600 flex items-center justify-center text-white font-medium text-sm"
-                style={{ backgroundColor: getUserColor() }}
+                style={{ backgroundColor: primaryColor }}
                 title={user.name || 'Usuário'}
               >
                 {getUserInitials()}

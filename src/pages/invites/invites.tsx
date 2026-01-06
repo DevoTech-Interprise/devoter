@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Share, Copy, CheckCheck, Loader2 } from "lucide-react";
 import { useTheme } from "../../context/ThemeContext";
 import { useUser } from "../../context/UserContext";
+import { useCampaignColor } from "../../components/CampaignThemed";
 import { inviteService } from "../../services/inviteService";
 import { campaignService } from "../../services/campaignService";
 import { userService } from "../../services/userService";
@@ -13,6 +14,7 @@ import "react-toastify/dist/ReactToastify.css";
 const Invites = () => {
   const { darkMode } = useTheme();
   const { user, refreshUser } = useUser();
+  const { primaryColor } = useCampaignColor();
   const [loading, setLoading] = useState(false);
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [copiedMap, setCopiedMap] = useState<{ [key: string]: boolean }>({});
@@ -99,14 +101,8 @@ const Invites = () => {
       console.log('📥 Resposta completa:', response);
       console.log('🔑 invite_token recebido:', response.invite_token);
 
-      // 🔧 CORREÇÃO: Extrai apenas o token se vier com URL completa
-      let inviteToken = response.invite_token;
-
-      // Se o token contém a URL completa, extrai apenas a parte do token
-      if (inviteToken.includes('/invite/')) {
-        inviteToken = inviteToken.split('/invite/').pop() || inviteToken;
-        console.log('🔄 Token extraído:', inviteToken);
-      }
+      // Usa a URL completa retornada pela API sem filtrar
+      const inviteToken = response.invite_token;
 
       // Atualiza a lista com o NOVO token
       setCampaigns(prev => prev.map(c =>
@@ -122,14 +118,15 @@ const Invites = () => {
     }
   };
 
-  // 🔧 CORREÇÃO: Função para obter a URL completa corretamente
+  // Retorna a URL completa - se já vier completa da API, usa diretamente
   const getFullInviteUrl = (inviteToken: string) => {
-    // Remove qualquer URL que possa estar no token
-    const cleanToken = inviteToken.includes('/invite/')
-      ? inviteToken.split('/invite/').pop()
-      : inviteToken;
-
-    return `https://devoter.devotech.com.br/invite/${cleanToken}`;
+    // Se já for uma URL completa, retorna diretamente
+    if (inviteToken.startsWith('http://') || inviteToken.startsWith('https://')) {
+      return inviteToken;
+    }
+    
+    // Se for apenas o token, constrói a URL com o domínio correto
+    return `https://soudabase.com.br/invite/${inviteToken}`;
   };
 
   // Copiar link para área de transferência
@@ -148,8 +145,18 @@ const Invites = () => {
     if (!campaign.inviteToken) return toast.error("Nenhum link disponível. Gere o convite primeiro.");
 
     const fullUrl = getFullInviteUrl(campaign.inviteToken);
-    const inviteText = `Olá! ${campaign.inviter?.name || ''} está te convidando para participar da campanha politica de ${campaign.name}. Clique no link para participar!`;
-    const encodedText = encodeURIComponent(`${inviteText}\n\n${fullUrl}`);
+    
+    // Monta a mensagem no formato solicitado
+    let inviteText = `Olá, aqui é ${campaign.inviter?.name || ''}. Faça parte do grupo de amigos da ${campaign.name}. A sua participação é muito importante para uma BAHIA melhor.`;
+    
+    // Adiciona o link do YouTube entre parênteses se existir
+    if (campaign.link_youtube) {
+      inviteText += ` ( ${campaign.link_youtube} )`;
+    }
+    
+    inviteText += ` Clique no link abaixo, faça seu cadastro e convide mais amigos. ${fullUrl}`;
+    
+    const encodedText = encodeURIComponent(inviteText);
     const whatsappUrl = `https://wa.me/?text=${encodedText}`;
     window.open(whatsappUrl, "_blank");
   };
@@ -169,7 +176,7 @@ const Invites = () => {
   }
 
   return (
-    <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
+    <div className={`flex h-screen ${darkMode ? "bg-gray-900" : "bg-gray-100"}`}>
       <Sidebar />
 
       <div className="flex-1 overflow-auto">

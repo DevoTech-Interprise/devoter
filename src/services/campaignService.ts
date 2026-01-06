@@ -13,6 +13,7 @@ export interface Campaign {
   operator?: string;
   created_at?: string;
   updated_at?: string;
+  link_youtube?: string;
 }
 
 export interface CampaignPayload {
@@ -23,6 +24,7 @@ export interface CampaignPayload {
   color_secondary: string;
   created_by?: string;
   operator?: string;
+  link_youtube?: string;
 }
 
 export const campaignService = {
@@ -86,6 +88,7 @@ export const campaignService = {
     formData.append('description', data.description);
     formData.append('color_primary', data.color_primary);
     formData.append('color_secondary', data.color_secondary);
+    formData.append('link_youtube', data.link_youtube || '');
 
     if (data.created_by) formData.append('created_by', data.created_by);
     if (data.operator !== undefined) formData.append('operator', data.operator || '');
@@ -115,6 +118,7 @@ export const campaignService = {
     formData.append('description', data.description);
     formData.append('color_primary', data.color_primary);
     formData.append('color_secondary', data.color_secondary);
+    formData.append('link_youtube', data.link_youtube || '');
 
     if (data.created_by) formData.append('created_by', data.created_by);
     if (data.operator !== undefined) formData.append('operator', data.operator || '');
