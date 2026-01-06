@@ -29,7 +29,7 @@ import 'react-phone-input-2/lib/style.css';
 
 const UserManagement = () => {
   const { darkMode } = useTheme();
-  const { primaryColor } = useCampaignColor();
+  useCampaignColor();
   const { user: currentUser } = useUser();
   const [users, setUsers] = useState<User[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]);

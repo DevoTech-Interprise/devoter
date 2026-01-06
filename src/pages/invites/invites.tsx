@@ -14,7 +14,7 @@ import "react-toastify/dist/ReactToastify.css";
 const Invites = () => {
   const { darkMode } = useTheme();
   const { user, refreshUser } = useUser();
-  const { primaryColor } = useCampaignColor();
+  useCampaignColor();
   const [loading, setLoading] = useState(false);
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [copiedMap, setCopiedMap] = useState<{ [key: string]: boolean }>({});
@@ -129,25 +129,27 @@ const Invites = () => {
     return `https://soudabase.com.br/invite/${inviteToken}`;
   };
 
-  // Copiar link para área de transferência
-  const handleCopyLink = (campaignId: string, inviteToken?: string) => {
-    if (!inviteToken) return toast.error("Nenhum link disponível. Gere o convite primeiro.");
-
-    const fullUrl = getFullInviteUrl(inviteToken);
-    navigator.clipboard.writeText(fullUrl);
-    setCopiedMap(prev => ({ ...prev, [campaignId]: true }));
-    setTimeout(() => setCopiedMap(prev => ({ ...prev, [campaignId]: false })), 2000);
-    toast.success("Link copiado para a área de transferência!");
+  // Mapeamento de siglas para nomes completos dos estados
+  const stateNames: { [key: string]: string } = {
+    'AC': 'ACRE', 'AL': 'ALAGOAS', 'AP': 'AMAPÁ', 'AM': 'AMAZONAS',
+    'BA': 'BAHIA', 'CE': 'CEARÁ', 'DF': 'DISTRITO FEDERAL', 'ES': 'ESPÍRITO SANTO',
+    'GO': 'GOIÁS', 'MA': 'MARANHÃO', 'MT': 'MATO GROSSO', 'MS': 'MATO GROSSO DO SUL',
+    'MG': 'MINAS GERAIS', 'PA': 'PARÁ', 'PB': 'PARAÍBA', 'PR': 'PARANÁ',
+    'PE': 'PERNAMBUCO', 'PI': 'PIAUÍ', 'RJ': 'RIO DE JANEIRO', 'RN': 'RIO GRANDE DO NORTE',
+    'RS': 'RIO GRANDE DO SUL', 'RO': 'RONDÔNIA', 'RR': 'RORAIMA', 'SC': 'SANTA CATARINA',
+    'SP': 'SÃO PAULO', 'SE': 'SERGIPE', 'TO': 'TOCANTINS'
   };
 
-  // Compartilhar no WhatsApp
-  const handleShareWhatsApp = (campaign: any) => {
-    if (!campaign.inviteToken) return toast.error("Nenhum link disponível. Gere o convite primeiro.");
-
+  // Função auxiliar para gerar a mensagem completa do convite
+  const generateInviteMessage = (campaign: any) => {
     const fullUrl = getFullInviteUrl(campaign.inviteToken);
     
+    // Pega o estado do usuário que criou a campanha e converte para nome completo
+    const userStateCode = campaign.inviter?.state || '';
+    const userState = stateNames[userStateCode.toUpperCase()] || userStateCode.toUpperCase() || 'SEU ESTADO';
+    
     // Monta a mensagem no formato solicitado
-    let inviteText = `Olá, aqui é ${campaign.inviter?.name || ''}. Faça parte do grupo de amigos da ${campaign.name}. A sua participação é muito importante para uma BAHIA melhor.`;
+    let inviteText = `Olá, aqui é ${campaign.inviter?.name || ''}. Faça parte do grupo de amigos da ${campaign.name}. A sua participação é muito importante para ${userState} melhor.`;
     
     // Adiciona o link do YouTube entre parênteses se existir
     if (campaign.link_youtube) {
@@ -156,6 +158,28 @@ const Invites = () => {
     
     inviteText += ` Clique no link abaixo, faça seu cadastro e convide mais amigos. ${fullUrl}`;
     
+    return inviteText;
+  };
+
+  // Copiar mensagem completa para área de transferência
+  const handleCopyLink = (campaignId: string, inviteToken?: string) => {
+    if (!inviteToken) return toast.error("Nenhum link disponível. Gere o convite primeiro.");
+
+    const campaign = campaigns.find(c => c.id === campaignId);
+    if (!campaign) return;
+
+    const inviteMessage = generateInviteMessage(campaign);
+    navigator.clipboard.writeText(inviteMessage);
+    setCopiedMap(prev => ({ ...prev, [campaignId]: true }));
+    setTimeout(() => setCopiedMap(prev => ({ ...prev, [campaignId]: false })), 2000);
+    toast.success("Mensagem completa copiada para a área de transferência!");
+  };
+
+  // Compartilhar no WhatsApp
+  const handleShareWhatsApp = (campaign: any) => {
+    if (!campaign.inviteToken) return toast.error("Nenhum link disponível. Gere o convite primeiro.");
+
+    const inviteText = generateInviteMessage(campaign);
     const encodedText = encodeURIComponent(inviteText);
     const whatsappUrl = `https://wa.me/?text=${encodedText}`;
     window.open(whatsappUrl, "_blank");
@@ -180,15 +204,15 @@ const Invites = () => {
       <Sidebar />
 
       <div className="flex-1 overflow-auto">
-        <div className="p-8 pt-15">
+        <div className="p-4 md:p-8 pt-6 md:pt-15">
           <ToastContainer position="top-right" autoClose={4000} />
 
           <div className="max-w-4xl mx-auto">
-            <header className="mb-8">
-              <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
+            <header className="mb-6 md:mb-8">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">
                 Gerenciar Convites
               </h1>
-              <p className="mt-2 text-gray-600 dark:text-gray-400">
+              <p className="mt-2 text-sm md:text-base text-gray-600 dark:text-gray-400">
                 Gere e compartilhe convites para suas campanhas
               </p>
             </header>
@@ -196,16 +220,16 @@ const Invites = () => {
             <div className="space-y-6">
               {campaigns.length > 0 ? (
                 campaigns.map((campaign) => (
-                  <div key={campaign.id} className={`w-full md:w-lg rounded-xl shadow-lg overflow-hidden ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                  <div key={campaign.id} className={`w-full rounded-xl shadow-lg overflow-hidden ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
                     {/* Cabeçalho do Card */}
-                    <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-                      <div className="flex items-start gap-6">
-                        <div className="relative group">
-                          <img src={campaign.logo} alt={campaign.name} className="w-32 h-32 object-cover rounded-lg shadow-md transition-transform group-hover:scale-105" />
+                    <div className="p-4 md:p-6 border-b border-gray-200 dark:border-gray-700">
+                      <div className="flex flex-col md:flex-row items-start gap-4 md:gap-6">
+                        <div className="relative group w-full md:w-auto flex justify-center md:justify-start">
+                          <img src={campaign.logo} alt={campaign.name} className="w-24 h-24 md:w-32 md:h-32 object-cover rounded-lg shadow-md transition-transform group-hover:scale-105" />
                         </div>
-                        <div className="flex-1">
-                          <h2 className="text-2xl font-semibold text-gray-800 dark:text-white">{campaign.name}</h2>
-                          <p className="mt-2 text-gray-600 dark:text-gray-400">{campaign.description}</p>
+                        <div className="flex-1 w-full">
+                          <h2 className="text-xl md:text-2xl font-semibold text-gray-800 dark:text-white text-center md:text-left">{campaign.name}</h2>
+                          <p className="mt-2 text-sm md:text-base text-gray-600 dark:text-gray-400 text-center md:text-left">{campaign.description}</p>
 
                           {/* 🔧 ADICIONA: Status do link */}
                           {campaign.inviteToken && (
@@ -223,7 +247,7 @@ const Invites = () => {
                     </div>
 
                     {/* Corpo do Card */}
-                    <div className="p-6 space-y-4">
+                    <div className="p-4 md:p-6 space-y-4">
                       {/* Input do link */}
                       {/* Input do link */}
                       <div>
@@ -251,12 +275,12 @@ const Invites = () => {
                       {/* QR Code */}
                       {campaign.inviteToken && (
                         <div className="flex flex-col justify-center items-center mt-4">
-                          <label className="block text-center text-xl font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          <label className="block text-center text-base md:text-xl font-medium text-gray-700 dark:text-gray-300 mb-2">
                             Escaneie o QRCode para o seu link de convite
                           </label>
                           <QRCode
                             value={getFullInviteUrl(campaign.inviteToken)}
-                            size={250}
+                            size={200}
                             bgColor={darkMode ? "#1F2937" : "#ffffff"}
                             fgColor={darkMode ? "#ffffff" : "#000000"}
                           />

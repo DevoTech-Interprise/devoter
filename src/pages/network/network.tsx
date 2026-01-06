@@ -19,7 +19,7 @@ interface EnhancedNetworkUser extends NetworkUser {
 const NetworkPage = () => {
   const { user } = useUser();
   const { darkMode } = useTheme();
-  const { primaryColor } = useCampaignColor();
+  useCampaignColor();
   const [network, setNetwork] = useState<EnhancedNetworkUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedNodes, setExpandedNodes] = useState<Set<number>>(new Set());
