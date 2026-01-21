@@ -13,7 +13,10 @@ import {
   ChevronDown,
   CalendarDays,
   ChevronRight,
-  Newspaper as News
+  Newspaper as News,
+  Bot,
+  Flag,
+  ListTodo
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTheme } from "../context/ThemeContext";
@@ -299,6 +302,27 @@ const Sidebar = () => {
       path: "/schedule",
       roles: ["admin", "super","manager"]
     },
+    {
+      type: 'item',
+      icon: <Bot size={20} />,
+      text: "IA",
+      path: "/ia",
+      roles: ["admin", "super"]
+    },
+    {
+      type: 'item',
+      icon: <Flag size={20} />,
+      text: "Denúncias",
+      path: "/denuncias",
+      roles: ["admin", "super", "manager"]
+    },
+    {
+      type: 'item',
+      icon: <ListTodo size={20} />,
+      text: "Tarefas",
+      path: "/tarefas",
+      roles: ["admin", "super", "manager", "user"]
+    },
 
   ];
 
@@ -382,7 +406,7 @@ const Sidebar = () => {
         </div>
 
         {/* Navegação */}
-        <nav className="flex-1 flex flex-col p-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 flex flex-col p-4 space-y-1 overflow-y-auto sidebar-scroll">
           {filteredMenuItems.map(item => {
             if (item.type === 'submenu') {
               return (
@@ -475,6 +499,39 @@ const Sidebar = () => {
           />
         </div>
       </aside>
+
+      {/* Estilos do scroll customizado */}
+      <style>{`
+        .sidebar-scroll::-webkit-scrollbar {
+          width: 5px;
+        }
+
+        .sidebar-scroll::-webkit-scrollbar-track {
+          background: transparent;
+          margin: 8px 0;
+        }
+
+        .sidebar-scroll::-webkit-scrollbar-thumb {
+          background: ${primaryColor};
+          border-radius: 10px;
+          opacity: 0.6;
+        }
+
+        .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+          opacity: 1;
+        }
+
+        /* Para Firefox */
+        .sidebar-scroll {
+          scrollbar-width: thin;
+          scrollbar-color: ${primaryColor} transparent;
+        }
+
+        /* Suavizar transição do scroll */
+        .sidebar-scroll {
+          scroll-behavior: smooth;
+        }
+      `}</style>
     </>
   );
 };

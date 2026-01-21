@@ -3,6 +3,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useCampaignColor } from './CampaignThemed';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import { ChatBotButton } from './ChatBotButton';
 
 interface PageLayoutProps {
   children: ReactNode;
@@ -38,6 +39,7 @@ export const PageLayout = ({ children }: PageLayoutProps) => {
           {children}
         </main>
       </div>
+      <ChatBotButton />
     </div>
   );
 };

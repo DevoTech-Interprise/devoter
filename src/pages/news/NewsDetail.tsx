@@ -442,11 +442,11 @@ export const NewsDetail: React.FC = () => {
                             {/* Conteúdo da Notícia */}
                             <div className={`rounded-2xl overflow-hidden shadow-lg ${darkMode ? 'bg-gray-800' : 'bg-white'} mb-6`}>
                                 {currentNews.image && (
-                                    <div className="relative">
+                                    <div className="relative w-full">
                                         <img
                                             src={currentNews.image}
                                             alt={currentNews.title}
-                                            className="w-full h-64 lg:h-80 object-cover"
+                                            className="w-full h-auto object-contain max-h-[70vh]"
                                         />
 
                                         {campaign && (

@@ -140,6 +140,19 @@ const Invites = () => {
     'SP': 'SÃO PAULO', 'SE': 'SERGIPE', 'TO': 'TOCANTINS'
   };
 
+  // Função auxiliar para detectar o gênero da campanha
+  const detectCampaignGender = (campaignName: string): 'feminine' | 'masculine' => {
+    const nameLower = campaignName.toLowerCase();
+    const feminineKeywords = ['candidata', 'deputada', 'senadora', 'vereadora', 'prefeita', 'governadora', 'presidenta'];
+    
+    // Verifica se contém alguma palavra feminina
+    if (feminineKeywords.some(keyword => nameLower.includes(keyword))) {
+      return 'feminine';
+    }
+    
+    return 'masculine';
+  };
+
   // Função auxiliar para gerar a mensagem completa do convite
   const generateInviteMessage = (campaign: any) => {
     const fullUrl = getFullInviteUrl(campaign.inviteToken);
@@ -148,8 +161,12 @@ const Invites = () => {
     const userStateCode = campaign.inviter?.state || '';
     const userState = stateNames[userStateCode.toUpperCase()] || userStateCode.toUpperCase() || 'SEU ESTADO';
     
+    // Detecta o gênero da campanha para usar o artigo correto
+    const gender = detectCampaignGender(campaign.name);
+    const article = gender === 'feminine' ? 'da' : 'do';
+    
     // Monta a mensagem no formato solicitado
-    let inviteText = `Olá, aqui é ${campaign.inviter?.name || ''}. Faça parte do grupo de amigos da ${campaign.name}. A sua participação é muito importante para ${userState} melhor.`;
+    let inviteText = `Olá, aqui é ${campaign.inviter?.name || ''}. Faça parte do grupo de amigos ${article} ${campaign.name}. A sua participação é muito importante para ${userState} melhor.`;
     
     // Adiciona o link do YouTube entre parênteses se existir
     if (campaign.link_youtube) {

@@ -6,6 +6,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 import { UserProvider } from "./context/UserContext";
 import { CampaignProvider } from "./context/CampaignContext";
 import { sessionService } from "./services/sessionService";
+import { ChatBotButton } from "./components/ChatBotButton";
 
 import Login from "./pages/login/login";
 import Dashboard from "./pages/dashboard/dashboard";
@@ -159,6 +160,7 @@ function App() {
             {/* ⚠️ Rota curinga (fallback) */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          <ChatBotButton />
         </Router>
       </CampaignProvider>
       </UserProvider>
