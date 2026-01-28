@@ -5,8 +5,11 @@ import { campaignService } from '../../services/campaignService';
 import { networkService, type NetworkUser } from '../../services/networkService';
 import { userService } from '../../services/userService';
 import { useUser } from '../../context/UserContext';
+import { useTheme } from '../../context/ThemeContext';
+import { useCampaignColor } from '../../components/CampaignThemed';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import NetworkPyramid, { type PyramidNodeData } from '../../components/NetworkPyramid';
 
 interface Campaign {
     id: number;
@@ -38,6 +41,8 @@ interface CampaignWithNetworks {
 
 const CampaignNetworksPage = () => {
     const { user } = useUser();
+    const { darkMode } = useTheme();
+    const { primaryColor } = useCampaignColor();
     const [campaignsWithNetworks, setCampaignsWithNetworks] = useState<CampaignWithNetworks[]>([]);
     const [accessibleCampaigns, setAccessibleCampaigns] = useState<Campaign[]>([]);
     const [loading, setLoading] = useState(true);
@@ -144,7 +149,14 @@ const CampaignNetworksPage = () => {
         return [];
     };
 
-    // Buscar campanhas acessíveis e suas redes - MODIFICADO para SUPER USER
+    // Função para expandir todos os nós recursivamente
+    const getAllNodeIds = (network: NetworkWithClass, ids: Set<number> = new Set()): Set<number> => {
+        ids.add(network.id);
+        network.children.forEach(child => getAllNodeIds(child, ids));
+        return ids;
+    };
+
+    // Função para buscar campanhas acessíveis e suas redes - MODIFICADO para SUPER USER
     const fetchCampaignsWithNetworks = async () => {
         try {
             setLoading(true);
@@ -182,14 +194,11 @@ const CampaignNetworksPage = () => {
                     console.log(`🔄 Processando campanha: ${campaign.name} (ID: ${campaign.id})`);
                     console.log(`👑 Root da rede: ${networkRootUserId}`);
 
-                    // Buscar a rede usando a rota específica por campanha
-                    const creatorNetwork = await networkService.getNetworkTreeByCampaign(
-                        campaign.id.toString(), 
-                        networkRootUserId
-                    );
-
+                    // Buscar a rede COMPLETA do usuário (não filtrada por campanha)
+                    const fullNetwork = await networkService.getNetworkTree(networkRootUserId);
+                    
                     // Calcular classes hierárquicas
-                    const networkWithClasses = calculateNetworkClasses(creatorNetwork);
+                    const networkWithClasses = calculateNetworkClasses(fullNetwork);
 
                     // Calcular estatísticas da campanha
                     const stats = calculateCampaignStats(networkWithClasses);
@@ -245,6 +254,15 @@ const CampaignNetworksPage = () => {
             }
 
             setCampaignsWithNetworks(campaignsWithNetworksData);
+
+            // Expandir TODOS os nós por padrão
+            const allNodeIds = new Set<number>();
+            campaignsWithNetworksData.forEach(campaignData => {
+                campaignData.networks.forEach(network => {
+                    getAllNodeIds(network, allNodeIds);
+                });
+            });
+            setExpandedNodes(allNodeIds);
 
             // Expandir a primeira campanha por padrão
             if (campaignsWithNetworksData.length > 0) {
@@ -399,6 +417,36 @@ const CampaignNetworksPage = () => {
                 return null;
         }
     };
+
+    // Converter NetworkWithClass para PyramidNodeData com informações de classe
+    const convertToPyramidData = (node: NetworkWithClass): PyramidNodeData => {
+        return {
+            id: node.id,
+            name: node.name,
+            email: node.email,
+            phone: node.phone,
+            role: node.role,
+            badge: `Classe ${node.networkClass}`,
+            level: node.networkClass,
+            children: node.children.map(child => convertToPyramidData(child))
+        };
+    };
+
+    // Gerar pirâmides por classe quando campaignsWithNetworks muda
+    useEffect(() => {
+        const pyramidMap: { [key: number]: PyramidNodeData } = {};
+        
+        campaignsWithNetworks.forEach(campaign => {
+            campaign.networks.forEach(network => {
+                if (filterClass === 'all' || network.networkClass === filterClass) {
+                    pyramidMap[network.id] = convertToPyramidData(network);
+                }
+            });
+        });
+
+        // Apenas armazenar no estado se necessário para futuro uso
+        console.log('Pyramid data gerado:', pyramidMap);
+    }, [campaignsWithNetworks, filterClass]);
 
     const renderTreeNode = (node: NetworkWithClass, level: number = 0) => {
         const isExpanded = expandedNodes.has(node.id);
@@ -762,12 +810,29 @@ const CampaignNetworksPage = () => {
                                             </div>
                                         )}
 
-                                        {/* Árvore da Rede */}
+                                        {/* Pirâmide da Rede */}
                                         {expandedCampaigns.has(campaign.id) && (
                                             <div className="p-6">
-                                                <div className="relative">
-                                                    {networks.map(network => renderTreeNode(network))}
-                                                </div>
+                                                {networks.map(network => {
+                                                    const pyramidData = convertToPyramidData(network);
+                                                    return (
+                                                        <div key={network.id} className="mb-8">
+                                                            <h4 className={`text-sm font-semibold mb-4 ${
+                                                                darkMode ? 'text-gray-300' : 'text-gray-700'
+                                                            }`}>
+                                                                Hierarquia de Classes
+                                                            </h4>
+                                                            <NetworkPyramid
+                                                                root={pyramidData}
+                                                                darkMode={darkMode}
+                                                                primaryColor={primaryColor}
+                                                                onNodeClick={(node: PyramidNodeData) => {
+                                                                    console.log('Node clicado:', node);
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         )}
                                     </div>

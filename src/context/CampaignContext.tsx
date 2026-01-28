@@ -6,12 +6,16 @@ type CampaignContextType = {
   campaign: Campaign | null;
   loading: boolean;
   refreshCampaign: () => Promise<void>;
+  primaryColor: string;
+  secondaryColor: string;
 };
 
-const CampaignContext = createContext<CampaignContextType>({
+export const CampaignContext = createContext<CampaignContextType>({
   campaign: null,
   loading: true,
   refreshCampaign: async () => {},
+  primaryColor: '#2563eb',
+  secondaryColor: '#1e40af',
 });
 
 export const useCampaign = () => {
@@ -26,10 +30,14 @@ export const CampaignProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useUser();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [loading, setLoading] = useState(true);
+  const [primaryColor, setPrimaryColor] = useState('#2563eb');
+  const [secondaryColor, setSecondaryColor] = useState('#1e40af');
 
   const refreshCampaign = async () => {
     if (!user?.campaign_id) {
       setCampaign(null);
+      setPrimaryColor('#2563eb');
+      setSecondaryColor('#1e40af');
       setLoading(false);
       return;
     }
@@ -38,9 +46,13 @@ export const CampaignProvider = ({ children }: { children: ReactNode }) => {
       setLoading(true);
       const campaignData = await campaignService.getById(user.campaign_id);
       setCampaign(campaignData);
+      setPrimaryColor(campaignData.color_primary || '#2563eb');
+      setSecondaryColor(campaignData.color_secondary || '#1e40af');
     } catch (error) {
       console.error('Erro ao carregar campanha:', error);
       setCampaign(null);
+      setPrimaryColor('#2563eb');
+      setSecondaryColor('#1e40af');
     } finally {
       setLoading(false);
     }
@@ -64,7 +76,7 @@ export const CampaignProvider = ({ children }: { children: ReactNode }) => {
   }, [user?.campaign_id]);
 
   return (
-    <CampaignContext.Provider value={{ campaign, loading, refreshCampaign }}>
+    <CampaignContext.Provider value={{ campaign, loading, refreshCampaign, primaryColor, secondaryColor }}>
       {children}
     </CampaignContext.Provider>
   );

@@ -31,6 +31,9 @@ import { ScheduleCalendar } from './pages/schedule/ScheduleCalendar';
 import { ScheduleForm } from './pages/schedule/ScheduleForm';
 import { ScheduleDetail } from './pages/schedule/ScheduleDetail';
 
+import CampaignLeadersProgress from './pages/campaign/CampaignLeadersProgress';
+import AddCampaignManagers from './pages/campaign/AddCampaignManagers';
+
 const RootRedirect = () => {
   const token = localStorage.getItem("token");
 
@@ -96,6 +99,24 @@ function App() {
               element={
                 <PrivateRoute>
                   <CampaignsPage />
+                </PrivateRoute>
+              }
+            />
+
+            <Route
+              path="/campanhas/:campaignId/lideranças"
+              element={
+                <PrivateRoute>
+                  <CampaignLeadersProgress />
+                </PrivateRoute>
+              }
+            />
+
+            <Route
+              path="/campanhas/:campaignId/adicionar-lideranças"
+              element={
+                <PrivateRoute>
+                  <AddCampaignManagers />
                 </PrivateRoute>
               }
             />

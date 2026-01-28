@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { X, Palette, Loader2, Edit2, Plus, Trash2, Users, Building2, Filter } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { X, Palette, Loader2, Edit2, Plus, Trash2, Users, Building2, Filter, TrendingUp } from 'lucide-react';
 import Sidebar from '../../components/Sidebar';
 import { campaignService } from '../../services/campaignService';
 import { userService } from '../../services/userService';
@@ -9,7 +10,7 @@ import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useUser } from '../../context/UserContext';
 import { useTheme } from '../../context/ThemeContext';
-import { useCampaignColor } from '../../components/CampaignThemed';
+import { useCampaignColor } from '../../hooks/useCampaignColor';
 
 type FormData = {
     name: string;
@@ -17,7 +18,6 @@ type FormData = {
     logo: File | string;
     color_primary: string;
     color_secondary: string;
-    operator: string; // String única com IDs separados por vírgula
     link_youtube: string;
 };
 
@@ -31,13 +31,11 @@ const CampaignsPage = () => {
     const { user, updateCampaign, refreshUser } = useUser();
     const { darkMode } = useTheme();
     const { primaryColor } = useCampaignColor();
+    const navigate = useNavigate();
     const [campaigns, setCampaigns] = useState<Campaign[]>([]);
     const [campaignsByCreator, setCampaignsByCreator] = useState<CampaignsByCreator[]>([]);
-    const [availableManagers, setAvailableManagers] = useState<User[]>([]);
-    const [allManagers, setAllManagers] = useState<User[]>([]);
     const [allUsers, setAllUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(false);
-    const [loadingManagers, setLoadingManagers] = useState(false);
     const [imageValid, setImageValid] = useState(true);
     const [formOpen, setFormOpen] = useState(false);
     const [editing, setEditing] = useState<Campaign | null>(null);
@@ -50,7 +48,6 @@ const CampaignsPage = () => {
         logo: '',
         color_primary: '#FCAF15',
         color_secondary: '#0833AF',
-        operator: '', // String vazia inicialmente
         link_youtube: '',
     });
     const [logoPreview, setLogoPreview] = useState<string>('');
@@ -115,51 +112,6 @@ const CampaignsPage = () => {
         return Array.from(creatorsMap.values());
     };
 
-    // Função para obter operadores atualmente vinculados à campanha sendo editada
-    const getCurrentCampaignOperators = (): User[] => {
-        if (!editing || !editing.operator) return [];
-
-        const operatorIds = editing.operator.split(',').filter(id => id.trim() !== '');
-        return allManagers.filter(manager =>
-            operatorIds.includes(manager.id) &&
-            manager.campaign_id === editing.id?.toString()
-        );
-    };
-
-    // Função para obter operadores vinculados a outras campanhas
-    const getOtherCampaignOperators = (): User[] => {
-        return allManagers.filter(manager =>
-            manager.campaign_id !== null &&
-            manager.campaign_id !== editing?.id?.toString()
-        );
-    };
-
-    // Buscar managers disponíveis (sem campaign_id)
-    const fetchAvailableManagers = async () => {
-        try {
-            setLoadingManagers(true);
-            const available = await userService.getAvailableManagers();
-            setAvailableManagers(available);
-
-            // Buscar todos os managers para exibir nomes
-            const allUsersData = await userService.getAll();
-            const allManagerUsers = allUsersData.filter(user => user.role === 'manager');
-            setAllManagers(allManagerUsers);
-            setAllUsers(allUsersData);
-
-            // Se estiver editando, carregar operadores atuais da campanha
-            if (editing) {
-                const currentOperators = await campaignService.getOperators(editing.id);
-                console.log('Operadores atuais da campanha:', currentOperators);
-            }
-        } catch (err) {
-            console.error('Erro ao carregar managers:', err);
-            toast.error('Erro ao carregar lista de operadores');
-        } finally {
-            setLoadingManagers(false);
-        }
-    };
-
     const fetchCampaigns = async () => {
         try {
             setLoading(true);
@@ -181,7 +133,7 @@ const CampaignsPage = () => {
 
             // Se for SUPER USER, agrupa campanhas por criador
             if (isSuperUser) {
-                await fetchAvailableManagers(); // Garante que allUsers está carregado
+                await userService.getAll().then(data => setAllUsers(data));
                 const grouped = groupCampaignsByCreator(data);
                 setCampaignsByCreator(grouped);
             }
@@ -195,9 +147,6 @@ const CampaignsPage = () => {
 
     useEffect(() => {
         fetchCampaigns();
-        if (!isSuperUser) {
-            fetchAvailableManagers();
-        }
     }, [user]);
 
     useEffect(() => {
@@ -220,7 +169,6 @@ const CampaignsPage = () => {
             logo: '',
             color_primary: '#FCAF15',
             color_secondary: '#0833AF',
-            operator: '', // String vazia
             link_youtube: '',
         });
         setLogoPreview('');
@@ -241,43 +189,15 @@ const CampaignsPage = () => {
             logo: c.logo,
             color_primary: c.color_primary || '#FCAF15',
             color_secondary: c.color_secondary || '#0833AF',
-            operator: c.operator || '', // String com IDs separados por vírgula
             link_youtube: c.link_youtube || '',
         });
         setLogoPreview(c.logo);
         setFormOpen(true);
-
-        // Recarregar managers disponíveis ao editar
-        await fetchAvailableManagers();
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         setForm(prev => ({ ...prev, [name]: value }));
-    };
-
-    const handleOperatorChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const selectedOptions = Array.from(e.target.selectedOptions, option => option.value);
-
-        // Se estiver editando, manter os operadores atuais que não foram desmarcados
-        if (editing) {
-            const currentOperatorIds = editing.operator ?
-                editing.operator.split(',').filter(id => id.trim() !== '') : [];
-
-            // Combinar arrays e remover duplicatas
-            const allSelected = [...new Set([...currentOperatorIds, ...selectedOptions])];
-
-            // Filtrar apenas os que ainda estão selecionados
-            const finalSelected = allSelected.filter(id =>
-                selectedOptions.includes(id) ||
-                (currentOperatorIds.includes(id) && selectedOptions.includes(id))
-            );
-
-            setForm(prev => ({ ...prev, operator: finalSelected.join(',') }));
-        } else {
-            // Para criação, usar apenas os selecionados
-            setForm(prev => ({ ...prev, operator: selectedOptions.join(',') }));
-        }
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -314,21 +234,6 @@ const CampaignsPage = () => {
             setSubmitting(true);
             const userId = user?.id;
 
-            console.log('=== DEBUG OPERADORES ===');
-            console.log('Operadores selecionados:', form.operator);
-            console.log('IDs dos operadores:', getSelectedOperatorIds());
-
-            if (editing) {
-                console.log('Operadores anteriores:', editing.operator);
-                console.log('Mudanças:', {
-                    removidos: editing.operator ?
-                        editing.operator.split(',').filter(id => !getSelectedOperatorIds().includes(id)) : [],
-                    adicionados: getSelectedOperatorIds().filter(id =>
-                        !editing.operator?.split(',').includes(id)
-                    )
-                });
-            }
-
             const payload: CampaignPayload = {
                 name: form.name,
                 description: form.description,
@@ -336,11 +241,8 @@ const CampaignsPage = () => {
                 color_secondary: form.color_secondary,
                 created_by: userId?.toString(),
                 logo: form.logo instanceof File ? form.logo : form.logo || undefined,
-                operator: form.operator,
                 link_youtube: form.link_youtube
             };
-
-            console.log('Payload enviado:', payload);
 
             if (editing) {
                 await campaignService.update(editing.id, payload);
@@ -352,7 +254,6 @@ const CampaignsPage = () => {
 
             setFormOpen(false);
             fetchCampaigns();
-            fetchAvailableManagers();
         } catch (err) {
             console.error('Erro ao salvar campanha:', err);
             toast.error('Erro ao salvar campanha');
@@ -403,29 +304,12 @@ const CampaignsPage = () => {
             }
 
             fetchCampaigns();
-            fetchAvailableManagers();
         } catch (err) {
             console.error(err);
             toast.error('Erro ao excluir campanha');
         } finally {
             setDeleting(null);
         }
-    };
-
-    // Função para obter nomes dos operadores
-    const getOperatorNames = (operatorString: string = '') => {
-        if (!operatorString) return [];
-
-        const operatorIds = operatorString.split(',').filter(id => id.trim() !== '');
-        return operatorIds.map(operatorId => {
-            const manager = allManagers.find(m => m.id === operatorId);
-            return manager ? manager.name : 'Operador não encontrado';
-        });
-    };
-
-    // Função para obter IDs selecionados do form como array
-    const getSelectedOperatorIds = () => {
-        return form.operator ? form.operator.split(',').filter(id => id.trim() !== '') : [];
     };
 
     // Funções auxiliares para textos dinâmicos
@@ -465,7 +349,6 @@ const CampaignsPage = () => {
 
     // Componente para renderizar uma campanha individual
     const renderCampaignCard = (c: Campaign) => {
-        const operatorNames = getOperatorNames(c.operator);
         const userCanActivate = canActivateCampaign(c);
         const userCanEdit = canEditCampaign(c);
         const userCanDelete = canDeleteCampaign(c);
@@ -538,32 +421,6 @@ const CampaignsPage = () => {
                             </div>
                         )}
 
-                        {/* Operadores da campanha */}
-                        <div className="mb-4">
-                            <div className="flex items-center gap-2 mb-2">
-                                <Users className="w-4 h-4 text-gray-500" />
-                                <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
-                                    Operadores:
-                                </span>
-                            </div>
-                            {operatorNames.length > 0 ? (
-                                <div className="flex flex-wrap gap-1">
-                                    {operatorNames.map((operatorName, index) => (
-                                        <span
-                                            key={index}
-                                            className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs rounded-full"
-                                        >
-                                            {operatorName}
-                                        </span>
-                                    ))}
-                                </div>
-                            ) : (
-                                <span className="text-xs text-gray-500 dark:text-gray-400">
-                                    Nenhum operador atribuído
-                                </span>
-                            )}
-                        </div>
-
                         <div className="flex gap-3 items-center flex-wrap mb-4">
                             <div className="rounded-lg border border-gray-200 dark:border-gray-700 flex items-center">
                                 <div className="w-10 h-10 rounded-l-lg" style={{ backgroundColor: c.color_primary || '#FCAF15' }} />
@@ -572,6 +429,20 @@ const CampaignsPage = () => {
                             <span className="text-sm font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">
                                 Cores da campanha
                             </span>
+                        </div>
+
+                        <div className="flex gap-2 flex-wrap mb-4">
+                            {/* Botão para visualizar progresso das lideranças */}
+                            {(userCanActivate || isUserCreator) && (
+                                <button
+                                    onClick={() => navigate(`/campanhas/${c.id}/lideranças`)}
+                                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-semibold shadow transition"
+                                    title="Ver progresso das lideranças"
+                                >
+                                    <TrendingUp className="w-4 h-4" />
+                                    Lideranças
+                                </button>
+                            )}
                         </div>
 
                         {/* Botão de ativar/desativar */}
@@ -691,7 +562,7 @@ const CampaignsPage = () => {
                                 {getFilteredCampaignsByCreator().map(group => (
                                     <div key={group.creator.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                                         {/* Header do grupo de criador */}
-                                        <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-6 text-white">
+                                        <div className="bg-linear-to-r from-blue-500 to-purple-600 p-6 text-white">
                                             <div className="flex items-center gap-4">
                                                 <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
                                                     <Users className="w-6 h-6" />
@@ -829,117 +700,6 @@ const CampaignsPage = () => {
                                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                             Cole o link completo do vídeo do YouTube da campanha
                                         </p>
-                                    </div>
-
-                                    {/* Seletor de Operadores - Inclui disponíveis e já vinculados */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
-                                            <Users className="w-4 h-4 inline mr-2" />
-                                            Operadores
-                                        </label>
-                                        {loadingManagers ? (
-                                            <div className="flex items-center gap-2 text-gray-500">
-                                                <Loader2 className="w-4 h-4 animate-spin" />
-                                                Carregando operadores...
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <select
-                                                    multiple
-                                                    value={getSelectedOperatorIds()}
-                                                    onChange={handleOperatorChange}
-                                                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 text-gray-900 dark:text-white min-h-[120px]"
-                                                    size={5}
-                                                >
-                                                    {/* Operadores disponíveis (sem campanha) */}
-                                                    <optgroup label="Operadores Disponíveis">
-                                                        {availableManagers.map(manager => (
-                                                            <option key={manager.id} value={manager.id}>
-                                                                {manager.name} - {manager.email} (Disponível)
-                                                            </option>
-                                                        ))}
-                                                    </optgroup>
-
-                                                    {/* Operadores já vinculados a esta campanha (quando editando) */}
-                                                    {editing && (
-                                                        <optgroup label="Operadores Vinculados a Esta Campanha">
-                                                            {getCurrentCampaignOperators().map(manager => (
-                                                                <option key={manager.id} value={manager.id}>
-                                                                    {manager.name} - {manager.email} (Vinculado)
-                                                                </option>
-                                                            ))}
-                                                        </optgroup>
-                                                    )}
-
-                                                    {/* Operadores vinculados a outras campanhas */}
-                                                    <optgroup label="Operadores em Outras Campanhas">
-                                                        {getOtherCampaignOperators().map(manager => (
-                                                            <option
-                                                                key={manager.id}
-                                                                value={manager.id}
-                                                                disabled={manager.campaign_id !== null && manager.campaign_id !== editing?.id?.toString()}
-                                                            >
-                                                                {manager.name} - {manager.email}
-                                                                {manager.campaign_id && manager.campaign_id !== editing?.id?.toString()
-                                                                    ? ` (Em outra campanha)`
-                                                                    : ''}
-                                                            </option>
-                                                        ))}
-                                                    </optgroup>
-                                                </select>
-                                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                                    • Mantenha Ctrl (ou Cmd) para selecionar múltiplos<br />
-                                                    • Para remover um operador, desmarque-o da lista<br />
-                                                    • Operadores em outras campanhas não podem ser selecionados
-                                                </p>
-                                            </>
-                                        )}
-
-                                        {/* Operadores selecionados */}
-                                        {getSelectedOperatorIds().length > 0 && (
-                                            <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                                                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                                    Operadores selecionados ({getSelectedOperatorIds().length}):
-                                                </p>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {getSelectedOperatorIds().map(operatorId => {
-                                                        const manager = allManagers.find(m => m.id === operatorId);
-                                                        const isCurrentlyInThisCampaign = editing &&
-                                                            getCurrentCampaignOperators().some(m => m.id === operatorId);
-                                                        const isAvailable = availableManagers.some(m => m.id === operatorId);
-
-                                                        return manager ? (
-                                                            <div
-                                                                key={operatorId}
-                                                                className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${isCurrentlyInThisCampaign
-                                                                    ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border border-yellow-300'
-                                                                    : isAvailable
-                                                                        ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border border-green-300'
-                                                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border border-gray-300'
-                                                                    }`}
-                                                            >
-                                                                {manager.name}
-                                                                {isCurrentlyInThisCampaign && (
-                                                                    <span className="text-xs">(atual)</span>
-                                                                )}
-                                                                {!isAvailable && !isCurrentlyInThisCampaign && (
-                                                                    <span className="text-xs">(outra campanha)</span>
-                                                                )}
-                                                            </div>
-                                                        ) : null;
-                                                    })}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Resumo das ações */}
-                                        {editing && (
-                                            <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 space-y-1">
-                                                <p>• <strong>Para adicionar:</strong> Selecione operadores disponíveis</p>
-                                                <p>• <strong>Para remover:</strong> Desmarque operadores vinculados</p>
-                                                <p>• Operadores removidos ficarão disponíveis para outras campanhas</p>
-                                            </div>
-                                        )}
                                     </div>
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

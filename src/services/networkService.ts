@@ -542,6 +542,37 @@ export const networkService = {
    */
   collapseAllNodes(rootId: number): Set<number> {
     return new Set([rootId]);
+  },
+
+  /**
+   * Conta quantas pessoas estão na rede de um usuário (excluindo o próprio usuário)
+   * @param networkUser Usuário raiz da rede
+   * @returns Número total de pessoas convidadas
+   */
+  countNetworkMembers(networkUser: NetworkUser): number {
+    const countChildren = (node: NetworkUser): number => {
+      if (!node.children || node.children.length === 0) {
+        return 0;
+      }
+      
+      let count = node.children.length;
+      node.children.forEach(child => {
+        count += countChildren(child);
+      });
+      
+      return count;
+    };
+
+    return countChildren(networkUser);
+  },
+
+  /**
+   * Conta apenas os convites diretos (filhos imediatos)
+   * @param networkUser Usuário raiz da rede
+   * @returns Número de convites diretos
+   */
+  countDirectInvites(networkUser: NetworkUser): number {
+    return networkUser.children ? networkUser.children.length : 0;
   }
 };
 

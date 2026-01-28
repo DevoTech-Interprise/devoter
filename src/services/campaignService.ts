@@ -260,5 +260,39 @@ export const campaignService = {
     return response.data;
   },
 
+  // Métodos para gerenciar managers de campanha
+  async getCampaignManagers(campaignId: string | number) {
+    const response = await api.get(`api/campaign-managers/campaign/${campaignId}`);
+    return response.data;
+  },
 
+  async addCampaignManager(campaignId: string | number, userId: string | number, votesPromised: number, votesExpected: number) {
+    const response = await api.post('api/campaign-managers', {
+      campaign_id: campaignId,
+      user_id: userId,
+      votes_promised: votesPromised,
+      votes_expected: votesExpected,
+    });
+    return response.data;
+  },
+
+  async updateCampaignManagerGoals(managerId: string | number, votesPromised: number, votesExpected: number) {
+    const response = await api.put(`api/campaign-managers/${managerId}`, {
+      votes_promised: votesPromised,
+      votes_expected: votesExpected,
+    });
+    return response.data;
+  },
+
+  async updateCampaignManagerVotes(managerId: string | number, votesAchieved: number) {
+    const response = await api.put(`api/campaign-managers/${managerId}/votes`, {
+      votes_achieved: votesAchieved,
+    });
+    return response.data;
+  },
+
+  async removeCampaignManager(managerId: string | number) {
+    const response = await api.delete(`api/campaign-managers/${managerId}`);
+    return response.data;
+  },
 };

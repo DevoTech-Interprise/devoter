@@ -9,6 +9,7 @@ import { campaignService, type Campaign } from '../../services/campaignService';
 import { userService, type User as UserType } from '../../services/userService';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import NetworkPyramid, { type PyramidNodeData } from '../../components/NetworkPyramid';
 
 // Interface extendida
 interface EnhancedNetworkUser extends NetworkUser {
@@ -19,13 +20,14 @@ interface EnhancedNetworkUser extends NetworkUser {
 const NetworkPage = () => {
   const { user } = useUser();
   const { darkMode } = useTheme();
-  useCampaignColor();
+  const { primaryColor } = useCampaignColor();
   const [network, setNetwork] = useState<EnhancedNetworkUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedNodes, setExpandedNodes] = useState<Set<number>>(new Set());
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState<string>('all');
   const [filteredNetwork, setFilteredNetwork] = useState<EnhancedNetworkUser | null>(null);
+  const [pyramidData, setPyramidData] = useState<PyramidNodeData | null>(null);
   const [, setAllUsers] = useState<UserType[]>([]);
   const [campaignCreatorId, setCampaignCreatorId] = useState<string | null>(null);
   const [accessibleCampaigns, setAccessibleCampaigns] = useState<Campaign[]>([]);
@@ -332,6 +334,26 @@ const NetworkPage = () => {
         return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
+
+  // Converter EnhancedNetworkUser para PyramidNodeData
+  const convertToPyramidData = (node: EnhancedNetworkUser): PyramidNodeData => {
+    return {
+      id: node.id,
+      name: node.userData?.name || node.name,
+      email: node.userData?.email || node.email,
+      phone: node.userData?.phone || node.phone,
+      role: node.userData?.role,
+      badge: node.campaignData?.name,
+      children: node.children.map(child => convertToPyramidData(child))
+    };
+  };
+
+  // Atualizar pyramidData quando filteredNetwork muda
+  useEffect(() => {
+    if (filteredNetwork) {
+      setPyramidData(convertToPyramidData(filteredNetwork));
+    }
+  }, [filteredNetwork]);
 
   const renderTreeNode = (node: EnhancedNetworkUser, level: number = 0, highlightPath: boolean = false) => {
     const isExpanded = expandedNodes.has(node.id);
@@ -703,10 +725,15 @@ const NetworkPage = () => {
                 <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700"></div>
               </div>
 
-              {filteredNetwork ? (
-                <div className="relative">
-                  {renderTreeNode(filteredNetwork, 0, !isAdmin && !isSuperUser)}
-                </div>
+              {pyramidData ? (
+                <NetworkPyramid
+                  root={pyramidData}
+                  darkMode={darkMode}
+                  primaryColor={primaryColor}
+                  onNodeClick={(node: PyramidNodeData) => {
+                    console.log('Node clicado:', node);
+                  }}
+                />
               ) : (
                 <div className="text-center py-12">
                   <Users className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />

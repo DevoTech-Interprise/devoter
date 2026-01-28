@@ -218,7 +218,7 @@ const UserManagement = () => {
       role: currentUser?.role === 'admin' ? 'manager' : 'user',
       gender: '',
       country: 'BR',
-      state: '',
+      state: currentUser?.state || '',
       city: '',
       neighborhood: '',
       is_active: '1'
@@ -338,10 +338,19 @@ const UserManagement = () => {
         state: createForm.state || null,
         city: createForm.city || null,
         neighborhood: createForm.neighborhood || null,
-        is_active: createForm.is_active
+        is_active: createForm.is_active,
+        // ✅ Associar à campanha do usuário atual
+        campaign_id: currentUser?.campaign_id || null
       };
 
-      await userService.create(userData);
+      const newUser = await userService.create(userData);
+      
+      // Se o usuário foi criado com sucesso e há campaign_id, vincular à campanha
+      if (newUser.id && currentUser?.campaign_id) {
+        await userService.assignToCampaign(newUser.id, currentUser.campaign_id, currentUser.id);
+        console.log(`✅ Usuário ${newUser.name} vinculado à campanha ${currentUser.campaign_id}`);
+      }
+      
       await loadUsers();
       setShowCreateModal(false);
       setCreateForm({
@@ -403,7 +412,7 @@ const UserManagement = () => {
     const roleConfig = {
       super: { color: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300', icon: Shield, label: 'Super' },
       admin: { color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300', icon: Shield, label: 'Admin' },
-      manager: { color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300', icon: Users, label: 'Manager' },
+      manager: { color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300', icon: Users, label: 'Liderança' },
       user: { color: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300', icon: Users, label: 'Usuário' }
     };
 
@@ -515,7 +524,7 @@ const UserManagement = () => {
                 <div className="flex items-center">
                   <Users className={`w-8 h-8 ${darkMode ? "text-orange-400" : "text-orange-500"}`} />
                   <div className="ml-4">
-                    <p className={`text-sm ${darkMode ? "text-gray-400" : "text-gray-500"}`}>Managers</p>
+                    <p className={`text-sm ${darkMode ? "text-gray-400" : "text-gray-500"}`}>Lideranças</p>
                     <p className="text-2xl font-bold">
                       {users.filter(u => u.role === 'manager').length}
                     </p>
@@ -576,7 +585,7 @@ const UserManagement = () => {
                   >
                     <option value="all">Todos os cargos</option>
                     <option value="admin">Administradores</option>
-                    <option value="manager">Managers</option>
+                    <option value="manager">Lideranças</option>
                     <option value="user">Usuários</option>
                   </select>
                 </div>
@@ -791,11 +800,11 @@ const UserManagement = () => {
                       }`}
                   >
                     {currentUser?.role === 'admin' ? (
-                      <option value="manager">Manager</option>
+                      <option value="manager">Liderança</option>
                     ) : (
                       <>
                         <option value="user">Usuário</option>
-                        <option value="manager">Manager</option>
+                        <option value="manager">Liderança</option>
                         <option value="admin">Administrador</option>
                       </>
                     )}
@@ -1091,7 +1100,7 @@ const UserManagement = () => {
                         }`}
                     >
                       <option value="user">Usuário</option>
-                      <option value="manager">Manager</option>
+                      <option value="manager">Liderança</option>
                       <option value="admin">Administrador</option>
                     </select>
                   </div>

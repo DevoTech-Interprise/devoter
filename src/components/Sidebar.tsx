@@ -12,6 +12,7 @@ import {
   Sun,
   ChevronDown,
   CalendarDays,
+  BookDown,
   ChevronRight,
   Newspaper as News,
   Bot,
@@ -321,6 +322,13 @@ const Sidebar = () => {
       icon: <ListTodo size={20} />,
       text: "Tarefas",
       path: "/tarefas",
+      roles: ["admin", "super", "manager", "user"]
+    },
+    {
+      type: 'item',
+      icon: <BookDown size={20} />,
+      text: "Materiais de campanha",
+      path: "/materiais-campanha",
       roles: ["admin", "super", "manager", "user"]
     },
 

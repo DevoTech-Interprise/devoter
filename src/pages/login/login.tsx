@@ -177,7 +177,7 @@ const Login: React.FC = () => {
                 <input
                   id="email"
                   type="email"
-                  placeholder="you@example.com"
+                  placeholder="email@exemplo.com"
                   {...register("email")}
                   className={`w-full pl-10 pr-3 py-2 rounded-lg border focus:outline-none focus:ring-2 focus:border-transparent ${darkMode
                       ? "bg-gray-700 border-gray-600 text-white focus:ring-blue-400"
